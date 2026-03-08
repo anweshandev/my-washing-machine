@@ -339,6 +339,11 @@ class WashingMachineProvider extends ChangeNotifier {
     _addLog('Cancel wash');
   }
 
+  Future<void> newProgram() async {
+    await WashingMachineBridge.newProgram();
+    _addLog('New program');
+  }
+
   Future<void> childLockOn() async {
     await WashingMachineBridge.childLockOn();
     _addLog('Child lock ON');

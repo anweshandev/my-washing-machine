@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../providers/washing_machine_provider.dart';
+import '../providers/theme_provider.dart';
+import '../theme/app_theme.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -10,49 +13,95 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends State<ScanScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulseCtrl;
+
   @override
   void initState() {
     super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<WashingMachineProvider>().loadPairedDevices();
     });
   }
 
   @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final provider = context.watch<WashingMachineProvider>();
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         title: const Text('Connect to Washer'),
-        centerTitle: true,
-        elevation: 0,
+        actions: [
+          IconButton(
+            icon: Icon(
+              context.watch<ThemeProvider>().isDark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: 'Toggle theme',
+            onPressed: () => context.read<ThemeProvider>().toggle(),
+          ),
+        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Animated find-my SVG when scanning
+          if (provider.isScanning)
+            Center(
+              child: FadeTransition(
+                opacity: _pulseCtrl,
+                child: SvgPicture.asset(
+                  'assets/images/find-my.svg',
+                  width: 120,
+                  height: 120,
+                  colorFilter: ColorFilter.mode(
+                    cs.primary.withValues(alpha: 0.6),
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+            ),
+          if (provider.isScanning) const SizedBox(height: 8),
+
           // Connection status banner
           if (provider.connectionState == BtConnectionState.connecting)
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.blue.withValues(alpha: 0.1),
+                color: cs.secondary.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Row(
+              child: Row(
                 children: [
                   SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: cs.primary,
+                    ),
                   ),
-                  SizedBox(width: 12),
+                  const SizedBox(width: 12),
                   Text(
                     'Connecting...',
-                    style: TextStyle(fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: cs.onSurface,
+                    ),
                   ),
                 ],
               ),
@@ -60,41 +109,51 @@ class _ScanScreenState extends State<ScanScreen> {
 
           // Paired devices section
           _sectionHeader(
+            context,
             'Paired Devices',
             trailing: IconButton(
-              icon: const Icon(Icons.refresh, size: 20),
+              icon: Icon(Icons.refresh, size: 20, color: cs.primary),
               onPressed: () => provider.loadPairedDevices(),
             ),
           ),
           if (provider.pairedDevices.isEmpty)
-            _emptyCard('No paired Bluetooth devices found')
+            _emptyCard(context, 'No paired Bluetooth devices found')
           else
-            ...provider.pairedDevices.map((d) => _deviceTile(d, provider)),
+            ...provider.pairedDevices.map(
+              (d) => _deviceTile(context, d, provider),
+            ),
 
           const SizedBox(height: 24),
 
           // Discovered devices section
           _sectionHeader(
+            context,
             'Discovered Devices',
             trailing: provider.isScanning
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: cs.primary,
+                    ),
                   )
                 : IconButton(
-                    icon: const Icon(Icons.search, size: 20),
+                    icon: Icon(Icons.search, size: 20, color: cs.primary),
                     onPressed: () => provider.startScan(),
                   ),
           ),
           if (provider.discoveredDevices.isEmpty)
             _emptyCard(
+              context,
               provider.isScanning
                   ? 'Scanning for devices...'
                   : 'Tap search to discover nearby devices',
             )
           else
-            ...provider.discoveredDevices.map((d) => _deviceTile(d, provider)),
+            ...provider.discoveredDevices.map(
+              (d) => _deviceTile(context, d, provider),
+            ),
 
           const SizedBox(height: 24),
 
@@ -107,9 +166,6 @@ class _ScanScreenState extends State<ScanScreen> {
                   : () => provider.startScan(),
               icon: const Icon(Icons.bluetooth_searching),
               label: Text(provider.isScanning ? 'Scanning...' : 'Start Scan'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
             ),
           ),
         ],
@@ -117,17 +173,21 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  Widget _sectionHeader(String title, {Widget? trailing}) {
+  Widget _sectionHeader(
+    BuildContext context,
+    String title, {
+    Widget? trailing,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const Spacer(),
@@ -137,56 +197,63 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  Widget _emptyCard(String msg) {
+  Widget _emptyCard(BuildContext context, String msg) {
     return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Center(
-          child: Text(msg, style: TextStyle(color: Colors.grey[500])),
+          child: Text(
+            msg,
+            style: TextStyle(color: AppTheme.subtextColor(context)),
+          ),
         ),
       ),
     );
   }
 
-  Widget _deviceTile(BtDevice device, WashingMachineProvider provider) {
+  Widget _deviceTile(
+    BuildContext context,
+    BtDevice device,
+    WashingMachineProvider provider,
+  ) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
-      elevation: 0,
-      color: Colors.white,
       margin: const EdgeInsets.only(bottom: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.1),
+            color: cs.primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(Icons.bluetooth, color: Colors.blue),
+          child: Icon(Icons.bluetooth, color: cs.primary),
         ),
         title: Text(
           device.name,
-          style: const TextStyle(fontWeight: FontWeight.w600),
+          style: TextStyle(fontWeight: FontWeight.w600, color: cs.onSurface),
         ),
         subtitle: Text(
           device.address,
-          style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+          style: TextStyle(fontSize: 12, color: AppTheme.subtextColor(context)),
         ),
         trailing:
             provider.connectionState == BtConnectionState.connecting &&
                 provider.connectedDeviceName == device.name
-            ? const SizedBox(
+            ? SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: cs.primary,
+                ),
               )
-            : const Icon(Icons.chevron_right),
+            : Icon(
+                Icons.chevron_right,
+                color: cs.onSurface.withValues(alpha: 0.4),
+              ),
         onTap: () async {
           await provider.connectToDevice(device);
-          // Listen for connection state to navigate
           _waitForConnection(provider);
         },
       ),
@@ -194,7 +261,6 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   void _waitForConnection(WashingMachineProvider provider) {
-    // Poll connection state briefly
     Timer.periodic(const Duration(milliseconds: 500), (timer) {
       if (!mounted) {
         timer.cancel();
@@ -202,7 +268,6 @@ class _ScanScreenState extends State<ScanScreen> {
       }
       if (provider.connectionState == BtConnectionState.connected) {
         timer.cancel();
-        // Auto-authenticate and go to dashboard
         provider.authenticate();
         Navigator.of(context).pushReplacementNamed('/dashboard');
       } else if (provider.connectionState == BtConnectionState.disconnected) {

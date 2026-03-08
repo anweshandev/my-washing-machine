@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/washing_machine_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/washing_data.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -10,26 +11,33 @@ class DashboardScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<WashingMachineProvider>();
     final telemetry = provider.telemetry;
+    final cs = Theme.of(context).colorScheme;
     final isConnected = provider.connectionState == BtConnectionState.connected;
     final isAuth = provider.isAuthenticated;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         title: Text(provider.connectedDeviceName ?? 'Washing Machine'),
-        centerTitle: true,
-        elevation: 0,
         actions: [
           // Connection indicator
           Padding(
-            padding: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.only(right: 4),
             child: Icon(
               Icons.circle,
               size: 12,
               color: isConnected
-                  ? (isAuth ? Colors.green : Colors.orange)
-                  : Colors.red,
+                  ? (isAuth ? cs.primary : cs.secondary)
+                  : cs.error,
             ),
+          ),
+          IconButton(
+            icon: Icon(
+              context.watch<ThemeProvider>().isDark
+                  ? Icons.light_mode
+                  : Icons.dark_mode,
+            ),
+            tooltip: 'Toggle theme',
+            onPressed: () => context.read<ThemeProvider>().toggle(),
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -46,23 +54,14 @@ class DashboardScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ─── Status Card ───
           _StatusCard(telemetry: telemetry, isAuth: isAuth),
           const SizedBox(height: 16),
-
-          // ─── Program Selection ───
           _ProgramSelector(provider: provider),
           const SizedBox(height: 16),
-
-          // ─── Program Options ───
           _ProgramOptions(provider: provider),
           const SizedBox(height: 16),
-
-          // ─── Control Buttons ───
           _ControlButtons(provider: provider),
           const SizedBox(height: 16),
-
-          // ─── Log ───
           _LogPanel(log: provider.log),
         ],
       ),
@@ -79,10 +78,9 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -97,10 +95,10 @@ class _StatusCard extends StatelessWidget {
                       ? Icons.check_circle
                       : Icons.info_outline,
                   color: telemetry.isRunning
-                      ? Colors.blue
+                      ? cs.secondary
                       : telemetry.isCompleted
-                      ? Colors.green
-                      : Colors.grey,
+                      ? cs.primary
+                      : cs.onSurface.withValues(alpha: 0.4),
                   size: 28,
                 ),
                 const SizedBox(width: 12),
@@ -110,15 +108,16 @@ class _StatusCard extends StatelessWidget {
                     children: [
                       Text(
                         telemetry.processName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
+                          color: cs.onSurface,
                         ),
                       ),
                       if (!isAuth)
-                        const Text(
+                        Text(
                           'Not authenticated',
-                          style: TextStyle(color: Colors.orange, fontSize: 12),
+                          style: TextStyle(color: cs.secondary, fontSize: 12),
                         ),
                     ],
                   ),
@@ -126,10 +125,11 @@ class _StatusCard extends StatelessWidget {
                 if (telemetry.isRunning)
                   Text(
                     telemetry.remainingTime,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
-                      fontFamily: 'monospace',
+                      fontFamily: 'Roboto',
+                      color: cs.primary,
                     ),
                   ),
               ],
@@ -141,10 +141,18 @@ class _StatusCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _miniStat('Temp', '${telemetry.temperature}°C'),
-                  _miniStat('Spin', '${telemetry.spinSpeed} RPM'),
-                  _miniStat('Child Lock', telemetry.childLock ? 'ON' : 'OFF'),
-                  _miniStat('Door', telemetry.doorLock ? 'Locked' : 'Unlocked'),
+                  _miniStat(context, 'Temp', '${telemetry.temperature}°C'),
+                  _miniStat(context, 'Spin', '${telemetry.spinSpeed} RPM'),
+                  _miniStat(
+                    context,
+                    'Child Lock',
+                    telemetry.childLock ? 'ON' : 'OFF',
+                  ),
+                  _miniStat(
+                    context,
+                    'Door',
+                    telemetry.doorLock ? 'Locked' : 'Unlocked',
+                  ),
                 ],
               ),
             ],
@@ -153,18 +161,18 @@ class _StatusCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
+                  color: cs.error.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.error, color: Colors.red, size: 20),
+                    Icon(Icons.error, color: cs.error, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         telemetry.error,
-                        style: const TextStyle(
-                          color: Colors.red,
+                        style: TextStyle(
+                          color: cs.error,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -179,14 +187,25 @@ class _StatusCard extends StatelessWidget {
     );
   }
 
-  Widget _miniStat(String label, String value) {
+  Widget _miniStat(BuildContext context, String label, String value) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       children: [
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: cs.onSurface.withValues(alpha: 0.5),
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurface,
+          ),
         ),
       ],
     );
@@ -200,18 +219,21 @@ class _ProgramSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Program',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -223,10 +245,9 @@ class _ProgramSelector extends StatelessWidget {
                   label: Text(p.name),
                   selected: selected,
                   onSelected: (_) => provider.selectProgram(p.id),
-                  selectedColor: Colors.blue.withValues(alpha: 0.2),
                   labelStyle: TextStyle(
                     fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                    color: selected ? Colors.blue[800] : Colors.black87,
+                    color: selected ? cs.primary : cs.onSurface,
                     fontSize: 13,
                   ),
                 );
@@ -246,26 +267,28 @@ class _ProgramOptions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final prog = provider.selectedProgram;
 
     return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Settings',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
+              ),
             ),
             const SizedBox(height: 12),
 
             // Temperature
             if (prog.temperatures.isNotEmpty) ...[
-              _label('Temperature'),
+              _label(context, 'Temperature'),
               Wrap(
                 spacing: 8,
                 children: prog.temperatures.map((t) {
@@ -274,7 +297,6 @@ class _ProgramOptions extends StatelessWidget {
                     label: Text(t == 0 ? 'Cold' : '$t°C'),
                     selected: sel,
                     onSelected: (_) => provider.setTemperature(t),
-                    selectedColor: Colors.orange.withValues(alpha: 0.2),
                     labelStyle: TextStyle(
                       fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
                       fontSize: 13,
@@ -287,7 +309,7 @@ class _ProgramOptions extends StatelessWidget {
 
             // Spin Speed
             if (prog.spinSpeeds.isNotEmpty) ...[
-              _label('Spin Speed'),
+              _label(context, 'Spin Speed'),
               Wrap(
                 spacing: 8,
                 children: prog.spinSpeeds.map((s) {
@@ -296,7 +318,6 @@ class _ProgramOptions extends StatelessWidget {
                     label: Text(s == 0 ? 'No Spin' : '$s RPM'),
                     selected: sel,
                     onSelected: (_) => provider.setSpinSpeed(s),
-                    selectedColor: Colors.purple.withValues(alpha: 0.2),
                     labelStyle: TextStyle(
                       fontWeight: sel ? FontWeight.w600 : FontWeight.normal,
                       fontSize: 13,
@@ -337,7 +358,7 @@ class _ProgramOptions extends StatelessWidget {
                 dense: true,
               ),
             if (prog.canExtraRinse) ...[
-              _label('Extra Rinse'),
+              _label(context, 'Extra Rinse'),
               SegmentedButton<int>(
                 segments: const [
                   ButtonSegment(value: 0, label: Text('Off')),
@@ -352,7 +373,7 @@ class _ProgramOptions extends StatelessWidget {
             ],
 
             // Delay start
-            _label('Delay Start (hours)'),
+            _label(context, 'Delay Start (hours)'),
             Slider(
               value: provider.delayStart.toDouble(),
               min: 0,
@@ -369,14 +390,14 @@ class _ProgramOptions extends StatelessWidget {
     );
   }
 
-  Widget _label(String text) => Padding(
+  Widget _label(BuildContext context, String text) => Padding(
     padding: const EdgeInsets.only(bottom: 6, top: 4),
     child: Text(
       text,
       style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w500,
-        color: Colors.grey[700],
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
       ),
     ),
   );
@@ -389,21 +410,22 @@ class _ControlButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final isRunning = provider.telemetry.isRunning;
-    final isPaused = provider.telemetry.isPaused;
 
     return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Controls',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
+              ),
             ),
             const SizedBox(height: 12),
 
@@ -412,18 +434,20 @@ class _ControlButtons extends StatelessWidget {
               children: [
                 Expanded(
                   child: _actionBtn(
+                    context: context,
                     label: 'Load Program',
                     icon: Icons.upload,
-                    color: Colors.blue,
+                    color: cs.primary,
                     onPressed: () => provider.loadAndStartProgram(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _actionBtn(
+                    context: context,
                     label: isRunning ? 'Pause' : 'Start',
                     icon: isRunning ? Icons.pause : Icons.play_arrow,
-                    color: isRunning ? Colors.orange : Colors.green,
+                    color: isRunning ? cs.secondary : cs.primary,
                     onPressed: () =>
                         isRunning ? provider.pauseWash() : provider.startWash(),
                   ),
@@ -435,18 +459,20 @@ class _ControlButtons extends StatelessWidget {
               children: [
                 Expanded(
                   child: _actionBtn(
+                    context: context,
                     label: 'Cancel',
                     icon: Icons.cancel,
-                    color: Colors.red,
+                    color: cs.error,
                     onPressed: () => _confirmCancel(context, provider),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _actionBtn(
+                    context: context,
                     label: 'New Program',
                     icon: Icons.refresh,
-                    color: Colors.teal,
+                    color: cs.tertiary,
                     onPressed: () => provider.newProgram(),
                   ),
                 ),
@@ -457,13 +483,14 @@ class _ControlButtons extends StatelessWidget {
               children: [
                 Expanded(
                   child: _actionBtn(
+                    context: context,
                     label: provider.telemetry.childLock
                         ? 'Unlock Child'
                         : 'Child Lock',
                     icon: provider.telemetry.childLock
                         ? Icons.lock_open
                         : Icons.lock,
-                    color: Colors.deepPurple,
+                    color: cs.tertiary,
                     onPressed: () => provider.telemetry.childLock
                         ? provider.childLockOff()
                         : provider.childLockOn(),
@@ -472,9 +499,10 @@ class _ControlButtons extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: _actionBtn(
+                    context: context,
                     label: 'Read Status',
                     icon: Icons.sync,
-                    color: Colors.indigo,
+                    color: cs.primary,
                     onPressed: () => provider.readAllStatus(),
                   ),
                 ),
@@ -487,6 +515,7 @@ class _ControlButtons extends StatelessWidget {
   }
 
   void _confirmCancel(BuildContext context, WashingMachineProvider provider) {
+    final cs = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -504,10 +533,7 @@ class _ControlButtons extends StatelessWidget {
               Navigator.pop(ctx);
               provider.cancelWash();
             },
-            child: const Text(
-              'Yes, Cancel',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: Text('Yes, Cancel', style: TextStyle(color: cs.error)),
           ),
         ],
       ),
@@ -515,18 +541,23 @@ class _ControlButtons extends StatelessWidget {
   }
 
   Widget _actionBtn({
+    required BuildContext context,
     required String label,
     required IconData icon,
     required Color color,
     required VoidCallback onPressed,
   }) {
+    final onColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+        ? Colors.white
+        : Colors.black;
     return ElevatedButton.icon(
       onPressed: onPressed,
       icon: Icon(icon, size: 18),
       label: Text(label, style: const TextStyle(fontSize: 13)),
       style: ElevatedButton.styleFrom(
         backgroundColor: color,
-        foregroundColor: Colors.white,
+        foregroundColor: onColor,
         padding: const EdgeInsets.symmetric(vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
@@ -541,24 +572,28 @@ class _LogPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Log',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: cs.onSurface,
+              ),
             ),
             const SizedBox(height: 8),
             Container(
               height: 200,
               decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
+                color: isDark ? cs.surface : const Color(0xFF1E1E1E),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: ListView.builder(
@@ -566,10 +601,10 @@ class _LogPanel extends StatelessWidget {
                 itemCount: log.length,
                 itemBuilder: (_, i) => Text(
                   log[i],
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
+                  style: TextStyle(
+                    fontFamily: 'Roboto',
                     fontSize: 11,
-                    color: Color(0xFF00FF00),
+                    color: cs.primary,
                     height: 1.5,
                   ),
                 ),

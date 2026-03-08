@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import '../theme/app_theme.dart';
 
 class PermissionsScreen extends StatefulWidget {
   const PermissionsScreen({super.key});
@@ -17,7 +18,6 @@ class _PermissionsScreenState extends State<PermissionsScreen>
     'bluetooth': false,
     'location': false,
   };
-  final Map<String, bool> _services = {'bluetooth': false, 'location': false};
   bool _showBtCard = true;
   bool _showLocCard = true;
   int? _sdkInt;
@@ -180,33 +180,45 @@ class _PermissionsScreenState extends State<PermissionsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Logo
+              Center(
+                child: Image.asset(
+                  'assets/logos/ic_launcher-playstore.png',
+                  width: 80,
+                  height: 80,
+                ),
+              ),
+              const SizedBox(height: 24),
               Text(
                 'Permissions Required',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                style: theme.textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: cs.onSurface,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 'We need Bluetooth permissions to connect and communicate with your IFB washing machine.',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Colors.grey[600],
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.subtextColor(context),
                   height: 1.5,
                 ),
               ),
               const SizedBox(height: 40),
               if (_showBtCard)
                 _buildPermissionCard(
+                  context: context,
                   icon: Icons.bluetooth,
-                  iconColor: Colors.blue,
                   title: 'Nearby Devices',
                   description:
                       'Required to discover and connect to your washing machine via Bluetooth.',
@@ -216,8 +228,8 @@ class _PermissionsScreenState extends State<PermissionsScreen>
               if (_showBtCard && _showLocCard) const SizedBox(height: 20),
               if (_showLocCard)
                 _buildPermissionCard(
+                  context: context,
                   icon: Icons.location_on,
-                  iconColor: Colors.green,
                   title: 'Location Access',
                   description:
                       'Used to detect nearby Bluetooth devices for seamless connection.',
@@ -229,26 +241,23 @@ class _PermissionsScreenState extends State<PermissionsScreen>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.1),
+                  color: cs.secondary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Colors.orange.withValues(alpha: 0.3),
+                    color: cs.secondary.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.info_outline,
-                      color: Colors.orange,
-                      size: 24,
-                    ),
+                    Icon(Icons.info_outline, color: cs.secondary, size: 24),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         'All permissions must be granted for the app to communicate with the washing machine.',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(height: 1.4),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurface,
+                          height: 1.4,
+                        ),
                       ),
                     ),
                   ],
@@ -272,26 +281,28 @@ class _PermissionsScreenState extends State<PermissionsScreen>
   }
 
   Widget _buildPermissionCard({
+    required BuildContext context,
     required IconData icon,
-    required Color iconColor,
     required String title,
     required String description,
     required bool isGranted,
     required VoidCallback onTap,
   }) {
+    final cs = Theme.of(context).colorScheme;
+    final granted = isGranted;
+    final statusColor = granted ? cs.primary : cs.error;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.card(context),
+        borderRadius: BorderRadius.circular(AppTheme.cardRadius),
         border: Border.all(
-          color: isGranted
-              ? Colors.green.withValues(alpha: 0.3)
-              : Colors.grey.withValues(alpha: 0.2),
-          width: isGranted ? 2 : 1,
+          color: granted ? cs.primary.withValues(alpha: 0.4) : cs.outline,
+          width: granted ? 2 : 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -300,8 +311,8 @@ class _PermissionsScreenState extends State<PermissionsScreen>
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: isGranted ? null : onTap,
-          borderRadius: BorderRadius.circular(16),
+          onTap: granted ? null : onTap,
+          borderRadius: BorderRadius.circular(AppTheme.cardRadius),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
@@ -309,10 +320,10 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.1),
+                    color: cs.primary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(icon, color: iconColor, size: 28),
+                  child: Icon(icon, color: cs.primary, size: 28),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -324,9 +335,10 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                           Expanded(
                             child: Text(
                               title,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 16,
+                                color: cs.onSurface,
                               ),
                             ),
                           ),
@@ -336,27 +348,24 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: (isGranted ? Colors.green : Colors.red)
-                                  .withValues(alpha: 0.1),
+                              color: statusColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  isGranted
+                                  granted
                                       ? Icons.check_circle
                                       : Icons.warning_amber_rounded,
-                                  color: isGranted ? Colors.green : Colors.red,
+                                  color: statusColor,
                                   size: 16,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  isGranted ? 'Granted' : 'Not Given',
+                                  granted ? 'Granted' : 'Not Given',
                                   style: TextStyle(
-                                    color: isGranted
-                                        ? Colors.green
-                                        : Colors.red,
+                                    color: statusColor,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -370,12 +379,12 @@ class _PermissionsScreenState extends State<PermissionsScreen>
                       Text(
                         description,
                         style: TextStyle(
-                          color: Colors.grey[600],
+                          color: AppTheme.subtextColor(context),
                           fontSize: 13,
                           height: 1.4,
                         ),
                       ),
-                      if (!isGranted) ...[
+                      if (!granted) ...[
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
