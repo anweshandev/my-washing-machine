@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import '../services/washing_machine_bridge.dart';
 import '../models/washing_data.dart';
 
@@ -7,7 +8,14 @@ import '../models/washing_data.dart';
 class BtDevice {
   final String name;
   final String address;
-  BtDevice({required this.name, required this.address});
+  final bool paired;
+  BtDevice({required this.name, required this.address, this.paired = false});
+
+  /// Returns true if this device looks like an IFB washing machine.
+  bool get isWashingMachine {
+    final n = name.toUpperCase();
+    return n.contains('WB-DUAL') || n.contains('IFB') || n.contains('SENORITA');
+  }
 }
 
 /// Live telemetry from the washing machine.
@@ -15,9 +23,9 @@ class MachineTelemetry {
   final int processState;
   final int temperature;
   final int spinSpeed;
-  final int remainingMinutes;
-  final int remainingSeconds;
+  final int balanceTime; // in minutes from device
   final String error;
+  final int errorCode;
   final bool childLock;
   final bool doorLock;
 
@@ -25,26 +33,43 @@ class MachineTelemetry {
     this.processState = 0,
     this.temperature = 0,
     this.spinSpeed = 0,
-    this.remainingMinutes = 0,
-    this.remainingSeconds = 0,
+    this.balanceTime = 0,
     this.error = 'No error',
+    this.errorCode = 0,
     this.childLock = false,
     this.doorLock = false,
   });
 
   String get processName => WashingData.getProcessName(processState);
-  String get remainingTime =>
-      '${remainingMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+  String get remainingTime {
+    final h = balanceTime ~/ 60;
+    final m = balanceTime % 60;
+    if (h > 0) return '${h}h ${m.toString().padLeft(2, '0')}m';
+    return '${m.toString().padLeft(2, '0')}:00';
+  }
 
   bool get isRunning =>
-      processState >= 1 && processState <= 7 ||
-      processState >= 13 && processState <= 20;
-  bool get isCompleted => processState == 8 || processState == 21;
-  bool get isPaused => processState == 9 || processState == 22;
-  bool get hasError => error != 'No error';
+      processState >= 2 && processState <= 12 ||
+      processState == 17 ||
+      processState == 18 ||
+      processState == 19 ||
+      processState == 20 ||
+      processState == 21;
+  bool get isCompleted => processState == 13;
+  bool get isPaused => processState == 14;
+  bool get hasError => errorCode != 0;
 }
 
 enum BtConnectionState { disconnected, connecting, connected }
+
+/// Alert from the washing machine (error or status notification).
+class MachineAlert {
+  final String message;
+  final int errorCode;
+  final DateTime time;
+  MachineAlert({required this.message, required this.errorCode, DateTime? time})
+    : time = time ?? DateTime.now();
+}
 
 /// Main state manager for the washing machine app.
 class WashingMachineProvider extends ChangeNotifier {
@@ -58,6 +83,8 @@ class WashingMachineProvider extends ChangeNotifier {
   String? _connectedDeviceName;
   String? get connectedDeviceName => _connectedDeviceName;
 
+  String? _connectedDeviceAddress;
+
   // ─── Scan State ───
   final List<BtDevice> _pairedDevices = [];
   List<BtDevice> get pairedDevices => List.unmodifiable(_pairedDevices);
@@ -65,12 +92,43 @@ class WashingMachineProvider extends ChangeNotifier {
   final List<BtDevice> _discoveredDevices = [];
   List<BtDevice> get discoveredDevices => List.unmodifiable(_discoveredDevices);
 
+  /// Only washing-machine devices from paired list.
+  List<BtDevice> get filteredPairedDevices =>
+      _pairedDevices.where((d) => d.isWashingMachine).toList();
+
+  /// Only washing-machine devices from discovered list.
+  List<BtDevice> get filteredDiscoveredDevices =>
+      _discoveredDevices.where((d) => d.isWashingMachine).toList();
+
+  /// All paired devices (unfiltered) for advanced users.
+  List<BtDevice> get allPairedDevices => List.unmodifiable(_pairedDevices);
+
   bool _isScanning = false;
   bool get isScanning => _isScanning;
+
+  bool _showAllDevices = false;
+  bool get showAllDevices => _showAllDevices;
+  void toggleShowAllDevices() {
+    _showAllDevices = !_showAllDevices;
+    notifyListeners();
+  }
 
   // ─── Telemetry ───
   MachineTelemetry _telemetry = MachineTelemetry();
   MachineTelemetry get telemetry => _telemetry;
+
+  // ─── Alerts ───
+  final List<MachineAlert> _alerts = [];
+  List<MachineAlert> get alerts => List.unmodifiable(_alerts);
+  MachineAlert? _latestAlert;
+  MachineAlert? get latestAlert => _latestAlert;
+  int _lastErrorCode = 0;
+
+  /// Clear the latest alert (dismiss).
+  void dismissAlert() {
+    _latestAlert = null;
+    notifyListeners();
+  }
 
   // ─── Program Config ───
   int _selectedProgramId = 0;
@@ -106,6 +164,7 @@ class WashingMachineProvider extends ChangeNotifier {
   StreamSubscription? _dataSub;
 
   Timer? _pollTimer;
+  int _authRetries = 0;
 
   WashingMachineProvider() {
     _listenToStreams();
@@ -121,87 +180,184 @@ class WashingMachineProvider extends ChangeNotifier {
 
   // ─── Scan Events ───
   void _onScanEvent(Map<String, dynamic> event) {
-    final name = event['name'] as String? ?? 'Unknown';
-    final address = event['address'] as String? ?? '';
-    if (address.isEmpty) return;
-
-    final exists = _discoveredDevices.any((d) => d.address == address);
-    if (!exists) {
-      _discoveredDevices.add(BtDevice(name: name, address: address));
-      notifyListeners();
+    // Java bridge emits { "devices": [...], "isScanning": bool }
+    final devices = event['devices'];
+    if (devices is List) {
+      _discoveredDevices.clear();
+      for (final d in devices) {
+        final map = Map<String, dynamic>.from(d as Map);
+        final name = (map['name'] as String?) ?? 'Unknown';
+        final address = (map['address'] as String?) ?? '';
+        final paired = (map['paired'] as String?) == 'true';
+        if (address.isEmpty) continue;
+        _discoveredDevices.add(
+          BtDevice(name: name, address: address, paired: paired),
+        );
+      }
     }
+    final scanning = event['isScanning'];
+    if (scanning is bool) _isScanning = scanning;
+    notifyListeners();
   }
 
   // ─── Connection Events ───
   void _onConnectionEvent(Map<String, dynamic> event) {
     final state = event['state'] as String? ?? '';
-    _addLog('Connection: $state');
+    final name = event['name'] as String? ?? '';
+    final address = event['address'] as String? ?? '';
+    _addLog('Connection: $state ${name.isNotEmpty ? "($name)" : ""}');
     switch (state) {
       case 'connecting':
         _connectionState = BtConnectionState.connecting;
         break;
       case 'connected':
         _connectionState = BtConnectionState.connected;
+        _connectedDeviceName = name.isNotEmpty ? name : _connectedDeviceName;
+        _connectedDeviceAddress = address.isNotEmpty
+            ? address
+            : _connectedDeviceAddress;
+        // Auto-authenticate on connect
+        _authRetries = 0;
+        _autoAuthenticate();
         break;
       case 'disconnected':
       case 'failed':
         _connectionState = BtConnectionState.disconnected;
         _isAuthenticated = false;
         _connectedDeviceName = null;
+        _connectedDeviceAddress = null;
         _stopPolling();
         break;
     }
     notifyListeners();
   }
 
+  /// Automatically authenticate after connecting.
+  Future<void> _autoAuthenticate() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (_connectionState == BtConnectionState.connected && !_isAuthenticated) {
+      _addLog('Auto-authenticating...');
+      await authenticate();
+    }
+  }
+
   // ─── Data Events (telemetry & auth feedback) ───
   void _onDataEvent(Map<String, dynamic> event) {
     final type = event['type'] as String? ?? '';
+    // The Java bridge puts parsed data in a nested 'data' map
+    final data = event['data'] is Map
+        ? Map<String, dynamic>.from(event['data'] as Map)
+        : <String, dynamic>{};
+
     switch (type) {
       case 'auth':
-        _isAuthenticated = event['success'] == true;
+        final authenticated = data['authenticated'] == true;
+        final authByte = data['authByte'] as String? ?? '';
+        _isAuthenticated = authenticated;
         _addLog(
-          'Auth: ${_isAuthenticated ? 'success' : 'failed – ${event['message']}'}',
+          'Auth: ${authenticated ? 'success' : 'failed (byte=$authByte)'}',
         );
-        if (_isAuthenticated) _startPolling();
+        if (authenticated) {
+          _authRetries = 0;
+          _startPolling();
+        } else if (_authRetries < 3) {
+          // Retry auth
+          _authRetries++;
+          _addLog('Retrying auth (attempt $_authRetries)...');
+          Future.delayed(const Duration(seconds: 1), () {
+            if (_connectionState == BtConnectionState.connected &&
+                !_isAuthenticated) {
+              authenticate();
+            }
+          });
+        }
         break;
-      case 'control_ack':
-        _addLog(
-          'Control ACK: ${event['accepted'] == true ? 'accepted' : 'rejected'}',
-        );
-        break;
-      case 'program_ack':
-        _addLog(
-          'Program ACK: ${event['accepted'] == true ? 'accepted' : 'rejected'}',
-        );
-        break;
+
       case 'telemetry':
+        final processState = (data['processState'] as int?) ?? 0;
+        final temp = (data['temperature'] as int?) ?? 0;
+        final speed = (data['spinSpeed'] as int?) ?? 0;
+        final balTime = (data['balanceTime'] as int?) ?? 0;
+        final childLockOn = data['childLockOn'] == true;
+        final doorOpen = data['isDoorOpen'] == true;
+        final alarmCode = (data['alarmCode'] as int?) ?? 0;
+        final alarmName = (data['alarmName'] as String?) ?? 'No error';
+
         _telemetry = MachineTelemetry(
-          processState: (event['processState'] as int?) ?? 0,
-          temperature: (event['temperature'] as int?) ?? 0,
-          spinSpeed: (event['spinSpeed'] as int?) ?? 0,
-          remainingMinutes: (event['remainingMinutes'] as int?) ?? 0,
-          remainingSeconds: (event['remainingSeconds'] as int?) ?? 0,
-          error: (event['error'] as String?) ?? 'No error',
-          childLock: event['childLock'] == true,
-          doorLock: event['doorLock'] == true,
+          processState: processState,
+          temperature: temp,
+          spinSpeed: speed,
+          balanceTime: balTime,
+          error: alarmCode != 0 ? alarmName : 'No error',
+          errorCode: alarmCode,
+          childLock: childLockOn,
+          doorLock: !doorOpen,
         );
+
+        // Check for new alerts
+        if (alarmCode != 0 && alarmCode != _lastErrorCode) {
+          _raiseAlert(alarmName, alarmCode);
+        }
+        _lastErrorCode = alarmCode;
         break;
+
+      case 'controlAck':
+        _addLog('Control ACK received');
+        // Request fresh status after control command
+        Future.delayed(const Duration(milliseconds: 500), () => _pollOnce());
+        break;
+
+      case 'programAck':
+        final progId = data['programId'];
+        _addLog('Program ACK: loaded program ${progId ?? "unknown"}');
+        Future.delayed(const Duration(milliseconds: 500), () => _pollOnce());
+        break;
+
       case 'raw':
         _addLog('Raw: ${event['hex'] ?? ''}');
+        break;
+
+      case 'unknown':
+        _addLog('Unknown frame: ${event['hex'] ?? ''}');
         break;
     }
     notifyListeners();
   }
 
+  // ─── Alerts ───
+  void _raiseAlert(String message, int errorCode) {
+    final alert = MachineAlert(message: message, errorCode: errorCode);
+    _alerts.insert(0, alert);
+    if (_alerts.length > 50) _alerts.removeLast();
+    _latestAlert = alert;
+    _addLog('ALERT: $message (code $errorCode)');
+    // Play system beep
+    _playAlertSound();
+  }
+
+  Future<void> _playAlertSound() async {
+    try {
+      await SystemSound.play(SystemSoundType.alert);
+      // Double beep for urgency
+      await Future.delayed(const Duration(milliseconds: 300));
+      await SystemSound.play(SystemSoundType.alert);
+    } catch (_) {}
+  }
+
   // ─── Polling ───
   void _startPolling() {
     _pollTimer?.cancel();
+    // Immediate first poll
+    _pollOnce();
     _pollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      if (_connectionState == BtConnectionState.connected && _isAuthenticated) {
-        WashingMachineBridge.readStatus1();
-      }
+      _pollOnce();
     });
+  }
+
+  void _pollOnce() {
+    if (_connectionState == BtConnectionState.connected && _isAuthenticated) {
+      WashingMachineBridge.readStatus1();
+    }
   }
 
   void _stopPolling() {
@@ -216,7 +372,11 @@ class WashingMachineProvider extends ChangeNotifier {
     _pairedDevices.clear();
     for (final d in devices) {
       _pairedDevices.add(
-        BtDevice(name: d['name'] ?? 'Unknown', address: d['address'] ?? ''),
+        BtDevice(
+          name: d['name'] ?? 'Unknown',
+          address: d['address'] ?? '',
+          paired: true,
+        ),
       );
     }
     notifyListeners();
@@ -251,6 +411,7 @@ class WashingMachineProvider extends ChangeNotifier {
   }
 
   Future<void> authenticate({String password = '1234'}) async {
+    _addLog('Sending auth with password');
     await WashingMachineBridge.authenticate(password: password);
   }
 

@@ -54,6 +54,47 @@ class DashboardScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Alert banner
+          if (provider.latestAlert != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: cs.error.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: cs.error.withValues(alpha: 0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: cs.error),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Machine Alert',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: cs.error,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          provider.latestAlert!.message,
+                          style: TextStyle(color: cs.error, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close, color: cs.error, size: 20),
+                    onPressed: () => provider.dismissAlert(),
+                  ),
+                ],
+              ),
+            ),
           _StatusCard(telemetry: telemetry, isAuth: isAuth),
           const SizedBox(height: 16),
           _ProgramSelector(provider: provider),
@@ -91,11 +132,15 @@ class _StatusCard extends StatelessWidget {
                 Icon(
                   telemetry.isRunning
                       ? Icons.local_laundry_service
+                      : telemetry.isPaused
+                      ? Icons.pause_circle_filled
                       : telemetry.isCompleted
                       ? Icons.check_circle
                       : Icons.info_outline,
                   color: telemetry.isRunning
                       ? cs.secondary
+                      : telemetry.isPaused
+                      ? cs.tertiary
                       : telemetry.isCompleted
                       ? cs.primary
                       : cs.onSurface.withValues(alpha: 0.4),
@@ -122,19 +167,21 @@ class _StatusCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (telemetry.isRunning)
+                if (telemetry.isRunning || telemetry.isPaused)
                   Text(
                     telemetry.remainingTime,
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
                       fontFamily: 'Roboto',
-                      color: cs.primary,
+                      color: telemetry.isPaused ? cs.tertiary : cs.primary,
                     ),
                   ),
               ],
             ),
-            if (telemetry.isRunning || telemetry.temperature > 0) ...[
+            if (telemetry.isRunning ||
+                telemetry.isPaused ||
+                telemetry.temperature > 0) ...[
               const SizedBox(height: 16),
               const Divider(height: 1),
               const SizedBox(height: 16),
@@ -412,6 +459,7 @@ class _ControlButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isRunning = provider.telemetry.isRunning;
+    final isPaused = provider.telemetry.isPaused;
 
     return Card(
       child: Padding(
@@ -445,7 +493,9 @@ class _ControlButtons extends StatelessWidget {
                 Expanded(
                   child: _actionBtn(
                     context: context,
-                    label: isRunning ? 'Pause' : 'Start',
+                    label: isRunning
+                        ? 'Pause'
+                        : (isPaused ? 'Resume' : 'Start'),
                     icon: isRunning ? Icons.pause : Icons.play_arrow,
                     color: isRunning ? cs.secondary : cs.primary,
                     onPressed: () =>

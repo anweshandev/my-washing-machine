@@ -16,6 +16,7 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseCtrl;
+  bool _waitingForAuth = false;
 
   @override
   void initState() {
@@ -39,11 +40,27 @@ class _ScanScreenState extends State<ScanScreen>
   Widget build(BuildContext context) {
     final provider = context.watch<WashingMachineProvider>();
     final cs = Theme.of(context).colorScheme;
+    final showAll = provider.showAllDevices;
+
+    final pairedList = showAll
+        ? provider.allPairedDevices
+        : provider.filteredPairedDevices;
+    final discoveredList = showAll
+        ? provider.discoveredDevices
+        : provider.filteredDiscoveredDevices;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Connect to Washer'),
         actions: [
+          IconButton(
+            icon: Icon(
+              showAll ? Icons.filter_list_off : Icons.filter_list,
+              size: 20,
+            ),
+            tooltip: showAll ? 'Show IFB devices only' : 'Show all devices',
+            onPressed: () => provider.toggleShowAllDevices(),
+          ),
           IconButton(
             icon: Icon(
               context.watch<ThemeProvider>().isDark
@@ -76,8 +93,9 @@ class _ScanScreenState extends State<ScanScreen>
             ),
           if (provider.isScanning) const SizedBox(height: 8),
 
-          // Connection status banner
-          if (provider.connectionState == BtConnectionState.connecting)
+          // Connection + auth status banner
+          if (provider.connectionState == BtConnectionState.connecting ||
+              _waitingForAuth)
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(16),
@@ -97,7 +115,7 @@ class _ScanScreenState extends State<ScanScreen>
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Connecting...',
+                    _waitingForAuth ? 'Authenticating...' : 'Connecting...',
                     style: TextStyle(
                       fontWeight: FontWeight.w500,
                       color: cs.onSurface,
@@ -116,12 +134,15 @@ class _ScanScreenState extends State<ScanScreen>
               onPressed: () => provider.loadPairedDevices(),
             ),
           ),
-          if (provider.pairedDevices.isEmpty)
-            _emptyCard(context, 'No paired Bluetooth devices found')
+          if (pairedList.isEmpty)
+            _emptyCard(
+              context,
+              showAll
+                  ? 'No paired Bluetooth devices found'
+                  : 'No IFB washing machines paired.\nTry "Show all" to see other devices.',
+            )
           else
-            ...provider.pairedDevices.map(
-              (d) => _deviceTile(context, d, provider),
-            ),
+            ...pairedList.map((d) => _deviceTile(context, d, provider)),
 
           const SizedBox(height: 24),
 
@@ -143,17 +164,15 @@ class _ScanScreenState extends State<ScanScreen>
                     onPressed: () => provider.startScan(),
                   ),
           ),
-          if (provider.discoveredDevices.isEmpty)
+          if (discoveredList.isEmpty)
             _emptyCard(
               context,
               provider.isScanning
-                  ? 'Scanning for devices...'
+                  ? 'Scanning for IFB devices...'
                   : 'Tap search to discover nearby devices',
             )
           else
-            ...provider.discoveredDevices.map(
-              (d) => _deviceTile(context, d, provider),
-            ),
+            ...discoveredList.map((d) => _deviceTile(context, d, provider)),
 
           const SizedBox(height: 24),
 
@@ -204,6 +223,7 @@ class _ScanScreenState extends State<ScanScreen>
         child: Center(
           child: Text(
             msg,
+            textAlign: TextAlign.center,
             style: TextStyle(color: AppTheme.subtextColor(context)),
           ),
         ),
@@ -217,6 +237,7 @@ class _ScanScreenState extends State<ScanScreen>
     WashingMachineProvider provider,
   ) {
     final cs = Theme.of(context).colorScheme;
+    final isWasher = device.isWashingMachine;
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -224,10 +245,15 @@ class _ScanScreenState extends State<ScanScreen>
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: cs.primary.withValues(alpha: 0.12),
+            color: (isWasher ? cs.primary : cs.onSurface).withValues(
+              alpha: 0.12,
+            ),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Icon(Icons.bluetooth, color: cs.primary),
+          child: Icon(
+            isWasher ? Icons.local_laundry_service : Icons.bluetooth,
+            color: isWasher ? cs.primary : cs.onSurface.withValues(alpha: 0.5),
+          ),
         ),
         title: Text(
           device.name,
@@ -254,27 +280,54 @@ class _ScanScreenState extends State<ScanScreen>
               ),
         onTap: () async {
           await provider.connectToDevice(device);
-          _waitForConnection(provider);
+          _waitForConnectionAndAuth(provider);
         },
       ),
     );
   }
 
-  void _waitForConnection(WashingMachineProvider provider) {
+  void _waitForConnectionAndAuth(WashingMachineProvider provider) {
+    int ticks = 0;
     Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      ticks++;
       if (!mounted) {
         timer.cancel();
+        setState(() => _waitingForAuth = false);
         return;
       }
-      if (provider.connectionState == BtConnectionState.connected) {
+
+      // Connected but not yet authenticated — show "Authenticating..."
+      if (provider.connectionState == BtConnectionState.connected &&
+          !provider.isAuthenticated) {
+        if (!_waitingForAuth) setState(() => _waitingForAuth = true);
+      }
+
+      // Authenticated — navigate to dashboard
+      if (provider.connectionState == BtConnectionState.connected &&
+          provider.isAuthenticated) {
         timer.cancel();
-        provider.authenticate();
+        setState(() => _waitingForAuth = false);
         Navigator.of(context).pushReplacementNamed('/dashboard');
-      } else if (provider.connectionState == BtConnectionState.disconnected) {
+        return;
+      }
+
+      // Disconnected or failed
+      if (provider.connectionState == BtConnectionState.disconnected) {
         timer.cancel();
+        setState(() => _waitingForAuth = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Connection failed. Try again.')),
         );
+        return;
+      }
+
+      // Timeout after 15 seconds — go to dashboard anyway (might auth later)
+      if (ticks > 30) {
+        timer.cancel();
+        setState(() => _waitingForAuth = false);
+        if (provider.connectionState == BtConnectionState.connected) {
+          Navigator.of(context).pushReplacementNamed('/dashboard');
+        }
       }
     });
   }
