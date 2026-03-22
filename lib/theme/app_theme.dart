@@ -2,20 +2,20 @@ import 'package:flutter/material.dart';
 
 /// Light palette
 class _Light {
-  static const text = Color(0xFF081D02);
-  static const background = Color(0xFFECFDE2);
-  static const primary = Color(0xFF27850A);
-  static const secondary = Color(0xFF59E1F3);
-  static const accent = Color(0xFF1159E8);
+  static const text = Color(0xFF031423);
+  static const background = Color(0xFFF4FAFE);
+  static const primary = Color(0xFF158CED);
+  static const secondary = Color(0xFFF478C1);
+  static const accent = Color(0xFFF04A45);
 }
 
 /// Dark palette
 class _Dark {
-  static const text = Color(0xFFE8FDE2);
-  static const background = Color(0xFF0C1F02);
-  static const primary = Color(0xFF95F578);
-  static const secondary = Color(0xFF0C93A4);
-  static const accent = Color(0xFF155DEE);
+  static const text = Color(0xFFDEEEFC);
+  static const background = Color(0xFF010609);
+  static const primary = Color(0xFF1188E8);
+  static const secondary = Color(0xFF890B54);
+  static const accent = Color(0xFFB8150F);
 }
 
 class AppTheme {
@@ -52,7 +52,7 @@ class AppTheme {
     secondary: _Light.secondary,
     accent: _Light.accent,
     cardColor: Colors.white,
-    surfaceColor: const Color(0xFFF4FFF0),
+    surfaceColor: const Color(0xFFE8F4FD),
   );
 
   // ─── Dark ThemeData ───
@@ -63,8 +63,8 @@ class AppTheme {
     primary: _Dark.primary,
     secondary: _Dark.secondary,
     accent: _Dark.accent,
-    cardColor: const Color(0xFF162B0A),
-    surfaceColor: const Color(0xFF132506),
+    cardColor: const Color(0xFF0A1929),
+    surfaceColor: const Color(0xFF071320),
   );
 
   // ─── Builder ───
@@ -79,7 +79,7 @@ class AppTheme {
     required Color surfaceColor,
   }) {
     final bool isDark = brightness == Brightness.dark;
-    final Color onPrimary = isDark ? const Color(0xFF081D02) : Colors.white;
+    final Color onPrimary = isDark ? const Color(0xFF031423) : Colors.white;
     final Color divider = text.withValues(alpha: 0.12);
 
     final colorScheme = ColorScheme(
@@ -230,8 +230,8 @@ class AppTheme {
       // ─── SnackBar ───
       snackBarTheme: SnackBarThemeData(
         backgroundColor: isDark
-            ? const Color(0xFF1A3A0A)
-            : const Color(0xFF2E7D32),
+            ? const Color(0xFF0A2540)
+            : const Color(0xFF1565C0),
         contentTextStyle: const TextStyle(
           fontFamily: fontFamily,
           color: Colors.white,

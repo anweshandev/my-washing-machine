@@ -216,6 +216,8 @@ class WashingMachineProvider extends ChangeNotifier {
         _connectedDeviceAddress = address.isNotEmpty
             ? address
             : _connectedDeviceAddress;
+        // Start polling immediately on connection (no auth required)
+        _startPolling();
         // Auto-authenticate on connect
         _authRetries = 0;
         _autoAuthenticate();
@@ -259,7 +261,6 @@ class WashingMachineProvider extends ChangeNotifier {
         );
         if (authenticated) {
           _authRetries = 0;
-          _startPolling();
         } else if (_authRetries < 3) {
           // Retry auth
           _authRetries++;
@@ -355,8 +356,9 @@ class WashingMachineProvider extends ChangeNotifier {
   }
 
   void _pollOnce() {
-    if (_connectionState == BtConnectionState.connected && _isAuthenticated) {
-      WashingMachineBridge.readStatus1();
+    if (_connectionState == BtConnectionState.connected) {
+      // Use READ_2 (opcode 05) for live telemetry — READ_1 only gives program details
+      WashingMachineBridge.readStatus2();
     }
   }
 
@@ -488,37 +490,45 @@ class WashingMachineProvider extends ChangeNotifier {
   Future<void> startWash() async {
     await WashingMachineBridge.startWash();
     _addLog('Start wash');
+    Future.delayed(const Duration(milliseconds: 500), () => _pollOnce());
   }
 
   Future<void> pauseWash() async {
     await WashingMachineBridge.pauseWash();
     _addLog('Pause wash');
+    Future.delayed(const Duration(milliseconds: 500), () => _pollOnce());
   }
 
   Future<void> cancelWash() async {
     await WashingMachineBridge.cancelWash();
     _addLog('Cancel wash');
+    Future.delayed(const Duration(milliseconds: 500), () => _pollOnce());
   }
 
   Future<void> newProgram() async {
     await WashingMachineBridge.newProgram();
     _addLog('New program');
+    Future.delayed(const Duration(milliseconds: 500), () => _pollOnce());
   }
 
   Future<void> childLockOn() async {
     await WashingMachineBridge.childLockOn();
     _addLog('Child lock ON');
+    Future.delayed(const Duration(milliseconds: 500), () => _pollOnce());
   }
 
   Future<void> childLockOff() async {
     await WashingMachineBridge.childLockOff();
     _addLog('Child lock OFF');
+    Future.delayed(const Duration(milliseconds: 500), () => _pollOnce());
   }
 
   Future<void> readAllStatus() async {
-    await WashingMachineBridge.readStatus1();
-    await Future.delayed(const Duration(milliseconds: 300));
+    // READ_2 gives live telemetry (opcode 0x85 response)
     await WashingMachineBridge.readStatus2();
+    await Future.delayed(const Duration(milliseconds: 300));
+    // READ_1 gives program details (opcode 0x84 response)
+    await WashingMachineBridge.readStatus1();
   }
 
   void _addLog(String msg) {

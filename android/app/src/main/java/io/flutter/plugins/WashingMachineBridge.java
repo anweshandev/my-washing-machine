@@ -526,6 +526,7 @@ public class WashingMachineBridge implements FlutterPlugin, MethodChannel.Method
         }
 
         // Get opcode (byte index 2, hex index 4-5)
+        // Machine responses have high bit set: sent 0x01 → response 0x81, etc.
         if (validFrame.length() < 6) return;
         int opcode = Integer.parseInt(validFrame.substring(4, 6), 16);
 
@@ -534,23 +535,27 @@ public class WashingMachineBridge implements FlutterPlugin, MethodChannel.Method
         parsed.put("opcode", opcode);
 
         switch (opcode) {
-            case 0x01: // AUTH response
+            case 0x81: // AUTH response (sent 0x01)
                 parseAuthResponse(validFrame, parsed);
                 emitData("auth", validFrame, parsed);
                 break;
 
-            case 0x04: // STATUS (READ_1 response)
-            case 0x05: // Extended status responses
+            case 0x84: // READ_1 response - program details (sent 0x04)
+                parseProgramDetailsResponse(validFrame, parsed);
+                emitData("programDetails", validFrame, parsed);
+                break;
+
+            case 0x85: // READ_2/3/4 response - live telemetry (sent 0x05)
                 parseTelemetryResponse(validFrame, parsed);
                 emitData("telemetry", validFrame, parsed);
                 break;
 
-            case 0x02: // START/PAUSE/CANCEL ACK
+            case 0x82: // START/PAUSE/CANCEL ACK (sent 0x02)
                 parsed.put("ackType", "control");
                 emitData("controlAck", validFrame, parsed);
                 break;
 
-            case 0x03: // Program load ACK
+            case 0x83: // Program load ACK (sent 0x03)
                 parseProgramResponse(validFrame, parsed);
                 emitData("programAck", validFrame, parsed);
                 break;
@@ -571,65 +576,116 @@ public class WashingMachineBridge implements FlutterPlugin, MethodChannel.Method
     }
 
     private void parseTelemetryResponse(String hex, Map<String, Object> parsed) {
+        // Response to READ_2/READ_3 (opcode 0x85). Byte layout from original app:
+        // hex[0:2]=63, [2:4]=len, [4:6]=85, [6:8]=subtype
+        // hex[8:12]=balanceTime, [12:16]=motorSpeed, [16:18]=waterTemp
+        // hex[18:22]=waterLevelFreq, [22:24]=waterLevelL, [24:26]=unbalance
+        // hex[26:28]=alarm1, [28:30]=alarm2, [30:32]=childLock
+        // hex[32:34]=oEn, [34:36]=processState, [36:38]=loadFlag
+        // hex[38:42]=programTime, [42:44]=previousState, [44:46]=door
         try {
-            if (hex.length() < 20) return;
+            if (hex.length() < 38) return;
 
-            // Process state at byte 3 (hex index 6-7)
-            int processState = Integer.parseInt(hex.substring(6, 8), 16);
-            parsed.put("processState", processState);
-            parsed.put("processName", getProcessName(processState));
+            // Balance time (minutes remaining): hex[8:12]
+            int balanceTime = Integer.parseInt(hex.substring(8, 12), 16);
+            parsed.put("balanceTime", balanceTime);
 
-            // Program ID at byte 4 (hex index 8-9)
-            if (hex.length() >= 10) {
-                int programId = Integer.parseInt(hex.substring(8, 10), 16);
-                parsed.put("programId", programId);
-            }
+            // Motor/spin speed: hex[12:16]
+            int spinSpeed = Integer.parseInt(hex.substring(12, 16), 16);
+            parsed.put("spinSpeed", spinSpeed);
 
-            // Balance time: bytes 5-6 (hex index 10-13) - minutes remaining
-            if (hex.length() >= 14) {
-                int balanceTime = Integer.parseInt(hex.substring(10, 14), 16);
-                parsed.put("balanceTime", balanceTime);
-            }
+            // Water temperature: hex[16:18]
+            int temperature = Integer.parseInt(hex.substring(16, 18), 16);
+            parsed.put("temperature", temperature);
 
-            // Temperature: byte 7 (hex index 14-15)
-            if (hex.length() >= 16) {
-                int temp = Integer.parseInt(hex.substring(14, 16), 16);
-                parsed.put("temperature", temp);
-            }
-
-            // Spin speed: bytes 8-9 (hex index 16-19)
-            if (hex.length() >= 20) {
-                int speed = Integer.parseInt(hex.substring(16, 20), 16);
-                parsed.put("spinSpeed", speed);
-            }
-
-            // Options byte: byte 10 (hex index 20-21)
-            if (hex.length() >= 22) {
-                String optionsHex = hex.substring(20, 22);
-                parsed.put("optionsByte", optionsHex);
-                parseOptions(optionsHex, parsed);
-            }
-
-            // Alarm bytes: look further in the frame
-            if (hex.length() >= 58) {
-                String alarmHex = hex.substring(52, 56);
+            // Alarm bytes: hex[26:30]
+            if (hex.length() >= 30) {
+                String alarmHex = hex.substring(26, 30);
                 int alarmCode = parseAlarm(alarmHex);
                 parsed.put("alarmCode", alarmCode);
                 parsed.put("alarmName", getErrorName(alarmCode));
             }
 
-            // Load flag: door position etc
-            if (hex.length() >= 74) {
-                String loadFlag = hex.substring(72, 74);
+            // Child lock: hex[30:32] - 01 = locked, 00 = unlocked
+            if (hex.length() >= 32) {
+                int childLockVal = Integer.parseInt(hex.substring(30, 32), 16);
+                parsed.put("childLockOn", childLockVal == 1);
+            }
+
+            // Process state: hex[34:36]
+            if (hex.length() >= 36) {
+                int processState = Integer.parseInt(hex.substring(34, 36), 16);
+                parsed.put("processState", processState);
+                parsed.put("processName", getProcessName(processState));
+            }
+
+            // Load flag / door status: hex[36:38]
+            if (hex.length() >= 38) {
+                String loadFlag = hex.substring(36, 38);
                 parsed.put("loadFlag", loadFlag);
                 parsed.put("isDoorOpen", isDoorOpen(loadFlag));
             }
 
-            // Child lock status guess from process state
-            parsed.put("childLockOn", processState == 23 || processState == 24);
+            // Total program time: hex[38:42]
+            if (hex.length() >= 42) {
+                int programTime = Integer.parseInt(hex.substring(38, 42), 16);
+                parsed.put("programTime", programTime);
+            }
+
+            // Previous state: hex[42:44]
+            if (hex.length() >= 44) {
+                int previousState = Integer.parseInt(hex.substring(42, 44), 16);
+                parsed.put("previousState", previousState);
+            }
 
         } catch (Exception e) {
             Log.e(TAG, "Parse telemetry error", e);
+        }
+    }
+
+    // Parse READ_1 response (0x84) - program details from machine
+    private void parseProgramDetailsResponse(String hex, Map<String, Object> parsed) {
+        try {
+            if (hex.length() < 20) return;
+
+            // Program code: hex[8:10]
+            if (hex.length() >= 10) {
+                int programId = Integer.parseInt(hex.substring(8, 10), 16);
+                parsed.put("programId", programId);
+            }
+            // Spin speed: hex[12:16]
+            if (hex.length() >= 16) {
+                int speed = Integer.parseInt(hex.substring(12, 16), 16);
+                parsed.put("spinSpeed", speed);
+            }
+            // Temperature: hex[16:18]
+            if (hex.length() >= 18) {
+                int temp = Integer.parseInt(hex.substring(16, 18), 16);
+                parsed.put("temperature", temp);
+            }
+            // Options byte: hex[18:20]
+            if (hex.length() >= 20) {
+                String optionsHex = hex.substring(18, 20);
+                parsed.put("optionsByte", optionsHex);
+                parseOptions(optionsHex, parsed);
+            }
+            // Delay start: hex[20:24]
+            if (hex.length() >= 24) {
+                int delay = Integer.parseInt(hex.substring(20, 24), 16);
+                parsed.put("delayStart", delay);
+            }
+            // Soak: hex[24:26]
+            if (hex.length() >= 26) {
+                int soak = Integer.parseInt(hex.substring(24, 26), 16);
+                parsed.put("soak", soak);
+            }
+            // Program category: hex[28:30]
+            if (hex.length() >= 30) {
+                int cat = Integer.parseInt(hex.substring(28, 30), 16);
+                parsed.put("programCategory", cat);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Parse program details error", e);
         }
     }
 

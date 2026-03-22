@@ -534,19 +534,29 @@ class _ControlButtons extends StatelessWidget {
                 Expanded(
                   child: _actionBtn(
                     context: context,
-                    label: provider.telemetry.childLock
-                        ? 'Unlock Child'
-                        : 'Child Lock',
-                    icon: provider.telemetry.childLock
-                        ? Icons.lock_open
-                        : Icons.lock,
-                    color: cs.tertiary,
-                    onPressed: () => provider.telemetry.childLock
-                        ? provider.childLockOff()
-                        : provider.childLockOn(),
+                    label: 'Child Lock',
+                    icon: Icons.lock,
+                    color: provider.telemetry.childLock
+                        ? cs.tertiary
+                        : cs.tertiary.withValues(alpha: 0.7),
+                    onPressed: () => provider.childLockOn(),
                   ),
                 ),
                 const SizedBox(width: 8),
+                Expanded(
+                  child: _actionBtn(
+                    context: context,
+                    label: 'Unlock Child',
+                    icon: Icons.lock_open,
+                    color: cs.error.withValues(alpha: 0.8),
+                    onPressed: () => provider.childLockOff(),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
                 Expanded(
                   child: _actionBtn(
                     context: context,
