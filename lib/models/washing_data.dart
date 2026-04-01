@@ -306,51 +306,53 @@ class WashingData {
   ];
 
   // ─── Process state names (index = state ID from telemetry) ───
+  // Must match the native Java bridge getProcessName() exactly.
   static const List<String> processStates = [
     'Nothing', // 0
-    'Pre-Wash', // 1
-    'Soak', // 2
-    'Main Wash', // 3
-    'Rinse 1', // 4
-    'Rinse 2', // 5
-    'Rinse 3', // 6
-    'Spin', // 7
-    'Completed', // 8
-    'Pause', // 9
-    'Door Lock Fault', // 10
-    'Delay Start', // 11
-    'Cancelled', // 12
-    'Dispenser', // 13
-    'Pre-Wash + ChildLock', // 14
-    'Soak + ChildLock', // 15
-    'Main Wash + ChildLock', // 16
-    'Rinse1 + ChildLock', // 17
-    'Rinse2 + ChildLock', // 18
-    'Rinse3 + ChildLock', // 19
-    'Spin + ChildLock', // 20
-    'Complete + ChildLock', // 21
-    'Pause + ChildLock', // 22
-    'Delay + ChildLock', // 23
-    'RinseHold + ChildLock', // 24
+    'Standby', // 1
+    'Initializing', // 2
+    'Pre-Wash', // 3
+    'Main Wash', // 4
+    'Extra Rinse', // 5
+    'Extra Rinse', // 6
+    'Extra Rinse', // 7
+    'Rinse', // 8
+    'Rinse', // 9
+    'Rinse', // 10
+    'Final Spin', // 11
+    'Anticrease', // 12
+    'End', // 13
+    'Pause', // 14
+    'Soak', // 15
+    'Rinse Hold', // 16
+    'Heating', // 17
+    'Drain', // 18
+    'Intermediate Spin', // 19
+    'Delay Start', // 20
+    'Door Locking', // 21
+    'Door Unlocking', // 22
+    'End (Child Lock)', // 23
+    'Rinse Hold (Child Lock)', // 24
   ];
 
   // ─── Error code names ───
+  // Must match the native Java bridge getErrorName() exactly.
   static const List<String> errorCodes = [
     'No error', // 0
-    'Water overflow', // 1
-    'Temperature sensor fault', // 2
-    'Door open error', // 3
-    'Water not drained', // 4
-    'Door lock error', // 5
-    'Unbalanced load', // 6
-    'Water not filling', // 7
-    'Motor RPM not sensed', // 8
-    'Communication error', // 9
-    'Heater error', // 10
-    'Motor fault', // 11
-    'Pump/Drain motor error', // 12
-    'Program interrupted', // 13
-    'Dry error', // 14
+    'Door locked', // 1
+    'Water overflow', // 2
+    'Pressostat', // 3
+    'Motor', // 4
+    'Motor triac', // 5
+    'Over heating', // 6
+    'Door open', // 7
+    'No water', // 8
+    'Low water pressure', // 9
+    'Heater', // 10
+    'NTC', // 11
+    'Drain pump', // 12
+    'Low voltage', // 13
+    'High voltage', // 14
     'High unbalanced load', // 15
   ];
 

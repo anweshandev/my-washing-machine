@@ -1,51 +1,83 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'firebase_options.dart';
 import 'providers/washing_machine_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/auth_provider.dart';
 import 'theme/app_theme.dart';
+import 'screens/auth_wrapper.dart';
 import 'screens/login_screen.dart';
+import 'screens/signup_screen.dart';
 import 'screens/permissions_screen.dart';
 import 'screens/scan_screen.dart';
+import 'screens/main_screen.dart';
 import 'screens/dashboard_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
-  final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => WashingMachineProvider()),
-      ],
-      child: WashingApp(isLoggedIn: isLoggedIn),
-    ),
-  );
+  // Load environment variables
+  await dotenv.load(fileName: ".env");
+
+  // Initialize Firebase
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Crashlytics: capture all uncaught Flutter errors
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
+  // Firebase App Check
+  if (kDebugMode || kProfileMode) {
+    final debugTokenAndroid = dotenv.env['ANDROID_DEBUG_TOKEN'];
+    await FirebaseAppCheck.instance.activate(
+      providerAndroid: AndroidDebugProvider(debugToken: debugTokenAndroid),
+    );
+  } else {
+    await FirebaseAppCheck.instance.activate(
+      providerAndroid: const AndroidPlayIntegrityProvider(),
+    );
+  }
+  await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
+
+  runApp(const LaundryIQApp());
 }
 
-class WashingApp extends StatelessWidget {
-  final bool isLoggedIn;
-  const WashingApp({super.key, required this.isLoggedIn});
+class LaundryIQApp extends StatelessWidget {
+  const LaundryIQApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-
-    return MaterialApp(
-      title: 'IFB Washer',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: themeProvider.mode,
-      initialRoute: isLoggedIn ? '/permissions' : '/login',
-      routes: {
-        '/login': (_) => const LoginScreen(),
-        '/permissions': (_) => const PermissionsScreen(),
-        '/scan': (_) => const ScanScreen(),
-        '/dashboard': (_) => const DashboardScreen(),
-      },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => WashingMachineProvider()),
+      ],
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp(
+            title: 'LaundryIQ',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            themeMode: themeProvider.mode,
+            initialRoute: '/',
+            routes: {
+              '/': (_) => const AuthWrapper(),
+              '/login': (_) => const LoginScreen(),
+              '/signup': (_) => const SignUpScreen(),
+              '/permissions': (_) => const PermissionsScreen(),
+              '/scan': (_) => const ScanScreen(),
+              '/main': (_) => const MainScreen(),
+              '/dashboard': (_) => const DashboardScreen(),
+            },
+          );
+        },
+      ),
     );
   }
 }

@@ -23,7 +23,7 @@ class _ScanScreenState extends State<ScanScreen>
     super.initState();
     _pulseCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<WashingMachineProvider>().loadPairedDevices();
@@ -78,8 +78,10 @@ class _ScanScreenState extends State<ScanScreen>
           // Animated find-my SVG when scanning
           if (provider.isScanning)
             Center(
-              child: FadeTransition(
-                opacity: _pulseCtrl,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.92, end: 1.08).animate(
+                  CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+                ),
                 child: SvgPicture.asset(
                   'assets/images/find-my.svg',
                   width: 120,
@@ -302,12 +304,12 @@ class _ScanScreenState extends State<ScanScreen>
         if (!_waitingForAuth) setState(() => _waitingForAuth = true);
       }
 
-      // Authenticated — navigate to dashboard
+      // Authenticated — navigate to main
       if (provider.connectionState == BtConnectionState.connected &&
           provider.isAuthenticated) {
         timer.cancel();
         setState(() => _waitingForAuth = false);
-        Navigator.of(context).pushReplacementNamed('/dashboard');
+        Navigator.of(context).pushReplacementNamed('/main');
         return;
       }
 
@@ -321,12 +323,12 @@ class _ScanScreenState extends State<ScanScreen>
         return;
       }
 
-      // Timeout after 15 seconds — go to dashboard anyway (might auth later)
+      // Timeout after 15 seconds — go to main anyway (might auth later)
       if (ticks > 30) {
         timer.cancel();
         setState(() => _waitingForAuth = false);
         if (provider.connectionState == BtConnectionState.connected) {
-          Navigator.of(context).pushReplacementNamed('/dashboard');
+          Navigator.of(context).pushReplacementNamed('/main');
         }
       }
     });

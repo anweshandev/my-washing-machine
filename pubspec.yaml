@@ -1,5 +1,5 @@
-name: my_washing_machine
-description: "My iOT washing machine application"
+name: laundry_iq
+description: "LaundryIQ - Smart washing machine control"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -44,6 +44,8 @@ dependencies:
   firebase_analytics: ^12.2.0
   firebase_storage: ^13.2.0
   firebase_app_check: ^0.4.2
+  firebase_crashlytics: ^5.1.0
+  cloud_firestore: ^6.2.0
   flutter_dotenv: ^6.0.0
   package_info_plus: ^9.0.1
   fl_chart: ^1.2.0
@@ -53,7 +55,8 @@ dependencies:
   image_cropper: ^12.1.1
   flutter_tts: ^4.2.5
   zo_screenshot: ^0.0.4
-  google_sign_in: ^7.2.0
+  google_sign_in: ^6.2.0
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
@@ -82,6 +85,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - .env
     - assets/logos/
     - assets/images/
     - assets/icons/

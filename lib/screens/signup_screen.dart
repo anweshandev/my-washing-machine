@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../utils/input_validator.dart';
@@ -7,54 +6,63 @@ import '../widgets/custom_text_field.dart';
 import '../widgets/alert_widgets.dart';
 import '../theme/app_theme.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
 
   @override
   void dispose() {
+    _fullNameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _confirmCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleSignUp() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final auth = context.read<AuthProvider>();
-    final success = await auth.signInWithEmailPassword(
+    final success = await auth.signUpWithEmailPassword(
+      fullName: _fullNameCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
       password: _passwordCtrl.text,
     );
 
     if (!mounted) return;
-    if (!success && auth.error != null) {
+    if (success) {
+      Navigator.of(context).pushReplacementNamed('/');
+    } else if (auth.error != null) {
       AlertWidgets.showError(
         context,
-        title: 'Login Failed',
+        title: 'Sign Up Failed',
         message: auth.error!,
       );
       auth.clearError();
     }
   }
 
-  Future<void> _handleGoogleSignIn() async {
+  Future<void> _handleGoogleSignUp() async {
     final auth = context.read<AuthProvider>();
     final success = await auth.signInWithGoogle();
 
     if (!mounted) return;
-    if (!success && auth.error != null) {
+    if (success) {
+      Navigator.of(context).pushReplacementNamed('/');
+    } else if (auth.error != null) {
       AlertWidgets.showError(
         context,
-        title: 'Sign In Failed',
+        title: 'Sign Up Failed',
         message: auth.error!,
       );
       auth.clearError();
@@ -63,58 +71,51 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text('Create Account'),
+      ),
       body: SafeArea(
         child: Consumer<AuthProvider>(
           builder: (context, auth, _) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 40),
-
-                  // Logo
-                  Center(
-                    child: Image.asset(
-                      'assets/logos/ic_launcher-playstore.png',
-                      width: 100,
-                      height: 100,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Title
-                  Center(
-                    child: Text(
-                      'LaundryIQ',
-                      style: theme.textTheme.headlineLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: cs.onSurface,
-                      ),
+                  Text(
+                    'Join LaundryIQ',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      'Smart washing machine control',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.subtextColor(context),
-                      ),
-                    ),
+                  Text(
+                    'Create an account to get started',
+                    style: TextStyle(color: AppTheme.subtextColor(context)),
                   ),
+                  const SizedBox(height: 32),
 
-                  const SizedBox(height: 40),
-
-                  // Login form
                   Form(
                     key: _formKey,
                     child: Column(
                       children: [
+                        CustomTextField(
+                          label: 'Full Name',
+                          hint: 'Enter your first and last name',
+                          controller: _fullNameCtrl,
+                          validator: InputValidator.validateFullName,
+                          keyboardType: TextInputType.name,
+                          prefixIcon: const Icon(Icons.person_outline),
+                        ),
+                        const SizedBox(height: 20),
                         CustomTextField(
                           label: 'Email Address',
                           hint: 'Enter your email',
@@ -126,9 +127,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 20),
                         CustomTextField(
                           label: 'Password',
-                          hint: 'Enter your password',
+                          hint: 'Create a strong password',
                           controller: _passwordCtrl,
                           validator: InputValidator.validatePassword,
+                          isPassword: true,
+                          prefixIcon: const Icon(Icons.lock_outline),
+                        ),
+                        const SizedBox(height: 20),
+                        CustomTextField(
+                          label: 'Confirm Password',
+                          hint: 'Re-enter your password',
+                          controller: _confirmCtrl,
+                          validator: (v) =>
+                              InputValidator.validateConfirmPassword(
+                                v,
+                                _passwordCtrl.text,
+                              ),
                           isPassword: true,
                           prefixIcon: const Icon(Icons.lock_outline),
                         ),
@@ -136,36 +150,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 32),
 
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {
-                        if (_emailCtrl.text.trim().isNotEmpty) {
-                          auth.resetPassword(_emailCtrl.text.trim());
-                          AlertWidgets.showSuccess(
-                            context,
-                            'Password reset email sent!',
-                          );
-                        } else {
-                          AlertWidgets.showInfo(
-                            context,
-                            'Enter your email first',
-                          );
-                        }
-                      },
-                      child: const Text('Forgot Password?'),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Sign In button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: auth.isLoading ? null : _handleLogin,
+                      onPressed: auth.isLoading ? null : _handleSignUp,
                       child: auth.isLoading
                           ? const SizedBox(
                               height: 20,
@@ -175,13 +165,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Sign In'),
+                          : const Text('Create Account'),
                     ),
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Divider
                   Row(
                     children: [
                       Expanded(child: Divider(color: cs.outline)),
@@ -200,16 +189,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Google Sign-In
                   SizedBox(
                     width: double.infinity,
                     height: 48,
                     child: OutlinedButton.icon(
-                      onPressed: auth.isLoading ? null : _handleGoogleSignIn,
-                      icon: SvgPicture.asset(
-                        'assets/icons/android_light_sq_ctn.svg',
+                      onPressed: auth.isLoading ? null : _handleGoogleSignUp,
+                      icon: Image.asset(
+                        'assets/logos/icon-192.png',
                         width: 20,
                         height: 20,
+                        errorBuilder: (_, _, _) =>
+                            const Icon(Icons.g_mobiledata, size: 20),
                       ),
                       label: const Text('Continue with Google'),
                     ),
@@ -217,33 +207,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Sign up link
-                  Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Don't have an account? ",
-                          style: TextStyle(
-                            color: AppTheme.subtextColor(context),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              Navigator.of(context).pushNamed('/signup'),
-                          child: const Text('Sign Up'),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
                   Center(
                     child: Text(
-                      'By continuing, you agree to our Terms of Service',
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      'By creating an account, you agree to our Terms of Service',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppTheme.subtextColor(context),
                       ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ],

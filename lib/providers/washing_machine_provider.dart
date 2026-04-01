@@ -49,13 +49,14 @@ class MachineTelemetry {
   }
 
   bool get isRunning =>
-      processState >= 2 && processState <= 12 ||
+      processState >= 2 &&
+          processState <= 12 &&
+          processState != 13 &&
+          processState != 14 ||
       processState == 17 ||
       processState == 18 ||
-      processState == 19 ||
-      processState == 20 ||
-      processState == 21;
-  bool get isCompleted => processState == 13;
+      processState == 19;
+  bool get isCompleted => processState == 13 || processState == 23;
   bool get isPaused => processState == 14;
   bool get hasError => errorCode != 0;
 }
