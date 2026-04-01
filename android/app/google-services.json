@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "918312796371",
+    "project_id": "anweshan-dev",
+    "storage_bucket": "anweshan-dev.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:918312796371:android:7242bc1d8889734a5ed426",
+        "android_client_info": {
+          "package_name": "dev.anweshan.apps.laundryiq"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "918312796371-q8ku3lj8mtnumcfr8b0u4eb4p0n513ej.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuZIDUeps2LDw5xPGPhu9BFC0umFB4hFo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "918312796371-q8ku3lj8mtnumcfr8b0u4eb4p0n513ej.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
