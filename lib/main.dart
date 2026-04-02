@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'firebase_options.dart';
+import 'services/tts_service.dart';
 import 'providers/washing_machine_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
@@ -44,6 +45,9 @@ void main() async {
     );
   }
   await FirebaseAppCheck.instance.setTokenAutoRefreshEnabled(true);
+
+  // Pre-initialize TTS engine so it's bound before first speak()
+  await TtsService().init();
 
   runApp(const LaundryIQApp());
 }

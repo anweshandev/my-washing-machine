@@ -12,6 +12,7 @@ class TtsService {
 
   Future<void> init() async {
     if (_initialized) return;
+    await _tts.awaitSpeakCompletion(true);
     await _tts.setLanguage('en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setVolume(1.0);
@@ -22,7 +23,16 @@ class TtsService {
   Future<void> speak(String text) async {
     if (!enabled) return;
     await init();
-    await _tts.speak(text);
+    try {
+      await _tts.speak(text);
+    } catch (_) {
+      // Engine not bound yet — reset and retry once
+      _initialized = false;
+      try {
+        await init();
+        await _tts.speak(text);
+      } catch (_) {}
+    }
   }
 
   Future<void> stop() async {
