@@ -126,9 +126,11 @@ class FirestoreService {
     return _tasksCol(uid)
         .orderBy('dueDate')
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => MaintenanceTask.fromMap(d.id, d.data()))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => MaintenanceTask.fromMap(d.id, d.data()))
+              .toList(),
+        );
   }
 
   Future<void> completeTask(String uid, MaintenanceTask task) async {
@@ -169,11 +171,7 @@ class FirestoreService {
     required String name,
     required Map<String, dynamic> config,
   }) async {
-    await _db
-        .collection('users')
-        .doc(uid)
-        .collection('favourite_washes')
-        .add({
+    await _db.collection('users').doc(uid).collection('favourite_washes').add({
       'name': name,
       'config': config,
       'createdAt': FieldValue.serverTimestamp(),

@@ -468,6 +468,22 @@ class WashingMachineProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Apply a full wash configuration from a history record or favourite.
+  void applyConfig(Map<String, dynamic> config) {
+    final progId = config['programId'] as int? ?? 0;
+    _selectedProgramId = progId;
+    _temperature = config['temperature'] as int? ?? selectedProgram.defaultTemp;
+    _spinSpeed = config['spinSpeed'] as int? ?? selectedProgram.defaultSpin;
+    final opts = config['options'] as Map<String, dynamic>? ?? {};
+    _preWash = opts['preWash'] == true;
+    _rinseHold = opts['rinseHold'] == true;
+    _soak = opts['soak'] == true;
+    _extraRinse = opts['extraRinse'] as int? ?? 0;
+    _timeSaver = opts['timeSaver'] == true;
+    _delayStart = opts['delayStart'] as int? ?? 0;
+    notifyListeners();
+  }
+
   void setTemperature(int temp) {
     _temperature = temp;
     notifyListeners();
