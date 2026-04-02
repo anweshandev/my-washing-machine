@@ -258,6 +258,42 @@ public class WashingMachineBridge implements FlutterPlugin, MethodChannel.Method
                 result.success(true);
                 break;
 
+            case "startForegroundService": {
+                String title = call.argument("title");
+                String body = call.argument("body");
+                Intent serviceIntent = new Intent(context, WashForegroundService.class);
+                serviceIntent.setAction(WashForegroundService.ACTION_START);
+                serviceIntent.putExtra(WashForegroundService.EXTRA_TITLE, title);
+                serviceIntent.putExtra(WashForegroundService.EXTRA_BODY, body);
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent);
+                } else {
+                    context.startService(serviceIntent);
+                }
+                result.success(true);
+                break;
+            }
+
+            case "updateForegroundService": {
+                String title = call.argument("title");
+                String body = call.argument("body");
+                Intent serviceIntent = new Intent(context, WashForegroundService.class);
+                serviceIntent.setAction(WashForegroundService.ACTION_UPDATE);
+                serviceIntent.putExtra(WashForegroundService.EXTRA_TITLE, title);
+                serviceIntent.putExtra(WashForegroundService.EXTRA_BODY, body);
+                context.startService(serviceIntent);
+                result.success(true);
+                break;
+            }
+
+            case "stopForegroundService": {
+                Intent serviceIntent = new Intent(context, WashForegroundService.class);
+                serviceIntent.setAction(WashForegroundService.ACTION_STOP);
+                context.startService(serviceIntent);
+                result.success(true);
+                break;
+            }
+
             default:
                 result.notImplemented();
                 break;

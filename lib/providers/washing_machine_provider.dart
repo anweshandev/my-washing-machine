@@ -182,6 +182,7 @@ class WashingMachineProvider extends ChangeNotifier {
   Timer? _pollTimer;
   int _authRetries = 0;
   int _lastProcessState = 0;
+  bool _foregroundServiceRunning = false;
   final TtsService _tts = TtsService();
 
   WashingMachineProvider() {
@@ -294,6 +295,7 @@ class WashingMachineProvider extends ChangeNotifier {
         _connectedDeviceName = null;
         _connectedDeviceAddress = null;
         _stopPolling();
+        _stopForegroundService();
         // Notify UI of unexpected disconnect (not user-initiated sign-out)
         if (wasConnected) {
           onUnexpectedDisconnect?.call();
@@ -373,6 +375,11 @@ class WashingMachineProvider extends ChangeNotifier {
         // Speak state-change cues
         _speakStateChange(processState);
         _lastProcessState = processState;
+
+        // Update foreground notification with latest telemetry
+        if (_telemetry.isRunning) {
+          _updateForegroundNotification();
+        }
         break;
 
       case 'controlAck':
@@ -416,6 +423,7 @@ class WashingMachineProvider extends ChangeNotifier {
     // Wash completed
     if (newState == 13 || newState == 23) {
       _tts.speak('Wash cycle completed');
+      _stopForegroundService();
     }
     // Paused
     else if (newState == 14 && _lastProcessState != 14) {
@@ -427,10 +435,12 @@ class WashingMachineProvider extends ChangeNotifier {
         newState >= 2 &&
         newState <= 12) {
       _tts.speak('Wash resumed');
+      _startForegroundService();
     }
     // First start (from standby/init to a running state)
     else if (_lastProcessState <= 1 && newState >= 2 && newState <= 12) {
       _tts.speak('Wash cycle started');
+      _startForegroundService();
     }
   }
 
@@ -440,6 +450,39 @@ class WashingMachineProvider extends ChangeNotifier {
       // Double beep for urgency
       await Future.delayed(const Duration(milliseconds: 300));
       await SystemSound.play(SystemSoundType.alert);
+    } catch (_) {}
+  }
+
+  // ─── Foreground Service ───
+
+  Future<void> _startForegroundService() async {
+    if (_foregroundServiceRunning) return;
+    _foregroundServiceRunning = true;
+    try {
+      await WashingMachineBridge.startForegroundService(
+        title: 'LaundryIQ – Washing',
+        body: '${_telemetry.processName} · ${_telemetry.remainingTime} remaining',
+      );
+    } catch (_) {
+      _foregroundServiceRunning = false;
+    }
+  }
+
+  Future<void> _updateForegroundNotification() async {
+    if (!_foregroundServiceRunning) return;
+    try {
+      await WashingMachineBridge.updateForegroundService(
+        title: 'LaundryIQ – Washing',
+        body: '${_telemetry.processName} · ${_telemetry.remainingTime} remaining',
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _stopForegroundService() async {
+    if (!_foregroundServiceRunning) return;
+    _foregroundServiceRunning = false;
+    try {
+      await WashingMachineBridge.stopForegroundService();
     } catch (_) {}
   }
 
@@ -657,6 +700,7 @@ class WashingMachineProvider extends ChangeNotifier {
     _connectionSub?.cancel();
     _dataSub?.cancel();
     _pollTimer?.cancel();
+    _stopForegroundService();
     super.dispose();
   }
 }

@@ -152,4 +152,30 @@ class WashingMachineBridge {
         }) ??
         false;
   }
+
+  // ─── Foreground Service ───
+
+  static Future<void> startForegroundService({
+    String title = 'LaundryIQ',
+    String body = 'Wash cycle in progress',
+  }) async {
+    await _methods.invokeMethod('startForegroundService', {
+      'title': title,
+      'body': body,
+    });
+  }
+
+  static Future<void> updateForegroundService({
+    String title = 'LaundryIQ',
+    String body = 'Wash cycle in progress',
+  }) async {
+    await _methods.invokeMethod('updateForegroundService', {
+      'title': title,
+      'body': body,
+    });
+  }
+
+  static Future<void> stopForegroundService() async {
+    await _methods.invokeMethod('stopForegroundService');
+  }
 }
