@@ -174,13 +174,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           TextButton(
             onPressed: () async {
+              final wmProvider = context.read<WashingMachineProvider>();
+              final authProvider = context.read<AuthProvider>();
+              final navigator = Navigator.of(context);
               Navigator.pop(ctx);
-              await context.read<WashingMachineProvider>().disconnect();
-              await context.read<AuthProvider>().signOut();
+              await wmProvider.disconnect();
+              await authProvider.signOut();
               if (context.mounted) {
-                Navigator.of(
-                  context,
-                ).pushNamedAndRemoveUntil('/', (route) => false);
+                navigator.pushNamedAndRemoveUntil('/', (route) => false);
               }
             },
             child: Text(

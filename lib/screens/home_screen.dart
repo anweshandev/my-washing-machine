@@ -17,11 +17,17 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(provider.connectedDeviceName ?? 'LaundryIQ'),
+        title: Text(
+          provider.connectedDeviceName ??
+              provider.savedDeviceName ??
+              'LaundryIQ',
+        ),
         leading: Padding(
           padding: const EdgeInsets.all(12),
           child: _ConnectionDot(
             isConnected: isConnected,
+            isConnecting:
+                provider.connectionState == BtConnectionState.connecting,
             isAuth: provider.isAuthenticated,
           ),
         ),
@@ -35,11 +41,27 @@ class HomeScreen extends StatelessWidget {
             tooltip: 'Toggle theme',
             onPressed: () => context.read<ThemeProvider>().toggle(),
           ),
-          if (!isConnected)
+          if (!isConnected &&
+              provider.connectionState != BtConnectionState.connecting)
             IconButton(
               icon: const Icon(Icons.bluetooth_searching),
               tooltip: 'Connect to device',
-              onPressed: () => Navigator.of(context).pushNamed('/scan'),
+              onPressed: () {
+                if (provider.hasSavedDevice) {
+                  provider.autoConnectSavedDevice();
+                } else {
+                  Navigator.of(context).pushNamed('/scan');
+                }
+              },
+            ),
+          if (provider.connectionState == BtConnectionState.connecting)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
           if (isConnected)
             IconButton(
@@ -49,42 +71,55 @@ class HomeScreen extends StatelessWidget {
             ),
         ],
       ),
-      body: !isConnected
-          ? _NotConnectedView()
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                // Alert banner
-                if (provider.latestAlert != null)
-                  _AlertBanner(
-                    message: provider.latestAlert!.message,
-                    onDismiss: () => provider.dismissAlert(),
-                  ),
-
-                // Live status hero card
-                _LiveStatusCard(telemetry: telemetry, provider: provider),
-
-                const SizedBox(height: 16),
-
-                // Quick actions when running
-                if (telemetry.isRunning || telemetry.isPaused)
-                  _RunningControls(provider: provider)
-                else ...[
-                  // Program selector
-                  _ProgramSelector(provider: provider),
-                  const SizedBox(height: 16),
-
-                  // Program options
-                  _ProgramOptions(provider: provider),
-                  const SizedBox(height: 16),
-
-                  // Start section
-                  _StartSection(provider: provider),
-                ],
-
-                const SizedBox(height: 80),
-              ],
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Connection status banner when not connected
+          if (!isConnected) _ConnectionBanner(provider: provider),
+          // Alert banner
+          if (provider.latestAlert != null)
+            _AlertBanner(
+              message: provider.latestAlert!.message,
+              onDismiss: () => provider.dismissAlert(),
             ),
+
+          // Live status hero card (show even when disconnected with stale data)
+          if (isConnected)
+            _LiveStatusCard(telemetry: telemetry, provider: provider),
+
+          if (isConnected) const SizedBox(height: 16),
+
+          // Quick actions when running
+          if (isConnected && (telemetry.isRunning || telemetry.isPaused))
+            _RunningControls(provider: provider)
+          else ...[
+            // Program selector — always visible, but disabled when disconnected
+            AbsorbPointer(
+              absorbing: !isConnected,
+              child: Opacity(
+                opacity: isConnected ? 1.0 : 0.5,
+                child: _ProgramSelector(provider: provider),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Program options
+            AbsorbPointer(
+              absorbing: !isConnected,
+              child: Opacity(
+                opacity: isConnected ? 1.0 : 0.5,
+                child: _ProgramOptions(provider: provider),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Start section — connects in background if needed
+            _StartSection(provider: provider, isConnected: isConnected),
+          ],
+
+          const SizedBox(height: 80),
+        ],
+      ),
     );
   }
 }
@@ -92,69 +127,110 @@ class HomeScreen extends StatelessWidget {
 // ─── Connection Dot ───
 class _ConnectionDot extends StatelessWidget {
   final bool isConnected;
+  final bool isConnecting;
   final bool isAuth;
-  const _ConnectionDot({required this.isConnected, required this.isAuth});
+  const _ConnectionDot({
+    required this.isConnected,
+    this.isConnecting = false,
+    required this.isAuth,
+  });
 
   @override
   Widget build(BuildContext context) {
+    Color color;
+    if (isConnected) {
+      color = isAuth ? Colors.green : Colors.orange;
+    } else if (isConnecting) {
+      color = Colors.orange;
+    } else {
+      color = Colors.red.withValues(alpha: 0.6);
+    }
     return Center(
       child: Container(
         width: 12,
         height: 12,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: isConnected
-              ? (isAuth ? Colors.green : Colors.orange)
-              : Colors.red.withValues(alpha: 0.6),
-        ),
+        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
       ),
     );
   }
 }
 
-// ─── Not Connected View ───
-class _NotConnectedView extends StatelessWidget {
+// ─── Connection Banner (shown inline when disconnected) ───
+class _ConnectionBanner extends StatelessWidget {
+  final WashingMachineProvider provider;
+  const _ConnectionBanner({required this.provider});
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isConnecting =
+        provider.connectionState == BtConnectionState.connecting;
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.local_laundry_service_outlined,
-              size: 80,
-              color: cs.primary.withValues(alpha: 0.3),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'No Machine Connected',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: cs.onSurface,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Connect to your IFB washing machine via Bluetooth to start controlling it.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: AppTheme.subtextColor(context),
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.of(context).pushNamed('/scan'),
-              icon: const Icon(Icons.bluetooth_searching),
-              label: const Text('Connect Device'),
-            ),
-          ],
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: (isConnecting ? cs.primary : cs.error).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: (isConnecting ? cs.primary : cs.error).withValues(alpha: 0.25),
         ),
+      ),
+      child: Row(
+        children: [
+          if (isConnecting)
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: cs.primary,
+              ),
+            )
+          else
+            Icon(Icons.bluetooth_disabled, color: cs.error, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isConnecting ? 'Connecting...' : 'Not Connected',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isConnecting
+                      ? 'Establishing connection to ${provider.savedDeviceName ?? "washer"}...'
+                      : 'Tap to reconnect or browse for settings.',
+                  style: TextStyle(
+                    color: AppTheme.subtextColor(context),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!isConnecting)
+            TextButton.icon(
+              onPressed: () {
+                if (provider.hasSavedDevice) {
+                  provider.autoConnectSavedDevice();
+                } else {
+                  Navigator.of(context).pushNamed('/scan');
+                }
+              },
+              icon: const Icon(Icons.bluetooth_searching, size: 16),
+              label: const Text('Connect'),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -825,11 +901,14 @@ class _ProgramOptions extends StatelessWidget {
 // ─── Start Section ───
 class _StartSection extends StatelessWidget {
   final WashingMachineProvider provider;
-  const _StartSection({required this.provider});
+  final bool isConnected;
+  const _StartSection({required this.provider, this.isConnected = true});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final isConnecting =
+        provider.connectionState == BtConnectionState.connecting;
 
     return Card(
       child: Padding(
@@ -901,7 +980,9 @@ class _StartSection extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => provider.loadAndStartProgram(),
+                    onPressed: isConnected
+                        ? () => provider.loadAndStartProgram()
+                        : null,
                     icon: const Icon(Icons.upload),
                     label: const Text('Load'),
                   ),
@@ -910,15 +991,35 @@ class _StartSection extends StatelessWidget {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      provider.loadAndStartProgram();
-                      Future.delayed(
-                        const Duration(seconds: 1),
-                        () => provider.startWash(),
-                      );
-                    },
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Start Wash'),
+                    onPressed: isConnecting
+                        ? null
+                        : isConnected
+                        ? () {
+                            provider.loadAndStartProgram();
+                            Future.delayed(
+                              const Duration(seconds: 1),
+                              () => provider.startWash(),
+                            );
+                          }
+                        : () {
+                            // Not connected — auto-connect first, then the
+                            // user can press Start again once connected
+                            provider.autoConnectSavedDevice();
+                          },
+                    icon: Icon(
+                      isConnected
+                          ? Icons.play_arrow
+                          : isConnecting
+                          ? Icons.bluetooth_searching
+                          : Icons.bluetooth,
+                    ),
+                    label: Text(
+                      isConnected
+                          ? 'Start Wash'
+                          : isConnecting
+                          ? 'Connecting...'
+                          : 'Connect & Start',
+                    ),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),

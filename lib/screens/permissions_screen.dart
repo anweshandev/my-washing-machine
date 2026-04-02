@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:provider/provider.dart';
+import '../providers/washing_machine_provider.dart';
 import '../services/washing_machine_bridge.dart';
 import '../theme/app_theme.dart';
 
@@ -63,6 +65,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
     if (!mounted) return;
     await _checkBluetoothService();
     if (mounted) setState(() => _initializing = false);
+    _checkReady();
     // Poll BT service status periodically (adapter state can change any time)
     _btServiceTimer = Timer.periodic(
       const Duration(seconds: 3),
@@ -149,7 +152,12 @@ class _PermissionsScreenState extends State<PermissionsScreen>
   void _checkReady() {
     if (!mounted || _initializing) return;
     if (_canContinue()) {
-      Navigator.of(context).pushReplacementNamed('/scan');
+      final provider = context.read<WashingMachineProvider>();
+      if (provider.hasSavedDevice) {
+        Navigator.of(context).pushReplacementNamed('/main');
+      } else {
+        Navigator.of(context).pushReplacementNamed('/scan');
+      }
     }
   }
 

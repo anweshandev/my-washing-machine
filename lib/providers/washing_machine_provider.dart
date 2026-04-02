@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/washing_machine_bridge.dart';
 import '../services/tts_service.dart';
 import '../models/washing_data.dart';
@@ -87,6 +88,19 @@ class WashingMachineProvider extends ChangeNotifier {
 
   String? _connectedDeviceAddress;
 
+  // ─── Saved Device (persisted across sessions) ───
+  static const _prefKeyDeviceMac = 'saved_device_mac';
+  static const _prefKeyDeviceName = 'saved_device_name';
+  String? _savedDeviceMac;
+  String? get savedDeviceMac => _savedDeviceMac;
+  String? _savedDeviceName;
+  String? get savedDeviceName => _savedDeviceName;
+  bool get hasSavedDevice => _savedDeviceMac != null;
+
+  /// Callback invoked when an unexpected disconnect happens while on the main screen.
+  /// The UI layer sets this to show a modal dialog.
+  VoidCallback? onUnexpectedDisconnect;
+
   // ─── Scan State ───
   final List<BtDevice> _pairedDevices = [];
   List<BtDevice> get pairedDevices => List.unmodifiable(_pairedDevices);
@@ -172,6 +186,44 @@ class WashingMachineProvider extends ChangeNotifier {
 
   WashingMachineProvider() {
     _listenToStreams();
+    _loadSavedDevice();
+  }
+
+  Future<void> _loadSavedDevice() async {
+    final prefs = await SharedPreferences.getInstance();
+    _savedDeviceMac = prefs.getString(_prefKeyDeviceMac);
+    _savedDeviceName = prefs.getString(_prefKeyDeviceName);
+    notifyListeners();
+  }
+
+  Future<void> saveDevice(String mac, String name) async {
+    _savedDeviceMac = mac;
+    _savedDeviceName = name;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKeyDeviceMac, mac);
+    await prefs.setString(_prefKeyDeviceName, name);
+    notifyListeners();
+  }
+
+  Future<void> clearSavedDevice() async {
+    _savedDeviceMac = null;
+    _savedDeviceName = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefKeyDeviceMac);
+    await prefs.remove(_prefKeyDeviceName);
+    notifyListeners();
+  }
+
+  /// Auto-connect to the saved device in the background.
+  /// Returns true if a connection attempt was started.
+  Future<bool> autoConnectSavedDevice() async {
+    if (_savedDeviceMac == null) return false;
+    if (_connectionState != BtConnectionState.disconnected) return false;
+    _connectedDeviceName = _savedDeviceName;
+    _connectionState = BtConnectionState.connecting;
+    notifyListeners();
+    await WashingMachineBridge.connectToDevice(_savedDeviceMac!);
+    return true;
   }
 
   void _listenToStreams() {
@@ -223,6 +275,10 @@ class WashingMachineProvider extends ChangeNotifier {
         _connectedDeviceAddress = address.isNotEmpty
             ? address
             : _connectedDeviceAddress;
+        // Persist this device for future auto-connect
+        if (_connectedDeviceAddress != null && _connectedDeviceName != null) {
+          saveDevice(_connectedDeviceAddress!, _connectedDeviceName!);
+        }
         // Start polling immediately on connection (no auth required)
         _startPolling();
         // Auto-authenticate on connect
@@ -231,12 +287,17 @@ class WashingMachineProvider extends ChangeNotifier {
         break;
       case 'disconnected':
       case 'failed':
+        final wasConnected = _connectionState == BtConnectionState.connected;
         _connectionState = BtConnectionState.disconnected;
         _isAuthenticated = false;
         _tts.speak('Disconnected from washing machine');
         _connectedDeviceName = null;
         _connectedDeviceAddress = null;
         _stopPolling();
+        // Notify UI of unexpected disconnect (not user-initiated sign-out)
+        if (wasConnected) {
+          onUnexpectedDisconnect?.call();
+        }
         break;
     }
     notifyListeners();
