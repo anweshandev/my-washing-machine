@@ -22,3 +22,7 @@
 -keep class com.google.firebase.** { *; }
 -keep class com.google.api.** { *; }
 -dontwarn com.google.**
+
+# Required for uCrop library added on 24/05/25
+-keep class com.yalantis.ucrop.** { *; }
+-keep class androidx.exifinterface.** { *; }

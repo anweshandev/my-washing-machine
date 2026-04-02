@@ -1,0 +1,7 @@
+{
+    "error-template-for-washer": "error_explainer.md",
+    "laundry-copilot-for-washer": "laundry_copilot.md",
+    "stain-helper-for-washer": "stain_helper.md",
+    "wash-advisor-for-washer": "wash_advisor.md",
+    "wash-insights-for-washer": "wash_insights.md"
+}

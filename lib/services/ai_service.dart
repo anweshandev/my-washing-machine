@@ -48,17 +48,16 @@ class AiService {
       result = result.replaceAll('{{${entry.key}}}', entry.value);
     }
     // Remove any unfilled optional blocks like {{#if ...}}...{{/if}}
-    result = result.replaceAll(RegExp(r'\{\{#if\s+\w+\}\}.*?\{\{/if\}\}', dotAll: true), '');
+    result = result.replaceAll(
+      RegExp(r'\{\{#if\s+\w+\}\}.*?\{\{/if\}\}', dotAll: true),
+      '',
+    );
     return result;
   }
 
   /// Parse the prompt into system instruction + user message parts.
   List<Content> _parsePromptParts(String filled) {
     final parts = <Content>[];
-    final systemMatch = RegExp(
-      r'\{\{role "system"\}\}\s*(.*?)(?=\{\{role "user"\}\})',
-      dotAll: true,
-    ).firstMatch(filled);
     final userMatch = RegExp(
       r'\{\{role "user"\}\}\s*(.*?)$',
       dotAll: true,
@@ -135,7 +134,7 @@ class AiService {
         'errorName': errorName,
         'errorCode': errorCode.toString(),
         'processState': processState,
-        if (additionalContext != null) 'additionalContext': additionalContext,
+        'additionalContext': ?additionalContext,
       },
     );
     return _tryParseJson(text);

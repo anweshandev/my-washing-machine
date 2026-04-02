@@ -3,8 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
+import '../providers/ai_provider.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import 'ai_copilot_screen.dart';
 
 class HistoryScreen extends StatelessWidget {
   const HistoryScreen({super.key});
@@ -80,31 +82,59 @@ class HistoryScreen extends StatelessWidget {
           grouped[key]!.add({...r, '_date': date});
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: grouped.length,
-          itemBuilder: (context, index) {
-            final dateKey = grouped.keys.elementAt(index);
-            final items = grouped[dateKey]!;
+        return Scaffold(
+          floatingActionButton: records.length >= 3
+              ? FloatingActionButton.extended(
+                  onPressed: () {
+                    final ai = context.read<AiProvider>();
+                    final historyData = records.map((r) {
+                      return {
+                        'program': r['programName'] ?? 'Unknown',
+                        'temperature': r['temperature'] ?? 0,
+                        'spinSpeed': r['spinSpeed'] ?? 0,
+                        'durationMinutes': r['durationMinutes'] ?? 0,
+                      };
+                    }).toList();
+                    ai.analyzeWashHistory(historyData);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChangeNotifierProvider.value(
+                          value: ai,
+                          child: const AiCopilotScreen(),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.auto_awesome, size: 18),
+                  label: const Text('Analyze'),
+                )
+              : null,
+          body: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: grouped.length,
+            itemBuilder: (context, index) {
+              final dateKey = grouped.keys.elementAt(index);
+              final items = grouped[dateKey]!;
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 8),
-                  child: Text(
-                    dateKey,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      color: cs.primary,
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, bottom: 8),
+                    child: Text(
+                      dateKey,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: cs.primary,
+                      ),
                     ),
                   ),
-                ),
-                ...items.map((r) => _HistoryTile(record: r)),
-              ],
-            );
-          },
+                  ...items.map((r) => _HistoryTile(record: r)),
+                ],
+              );
+            },
+          ),
         );
       },
     );

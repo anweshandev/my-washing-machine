@@ -9,6 +9,7 @@ import 'firebase_options.dart';
 import 'providers/washing_machine_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/ai_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/auth_wrapper.dart';
 import 'screens/login_screen.dart';
@@ -56,6 +57,7 @@ class LaundryIQApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => WashingMachineProvider()),
+        ChangeNotifierProvider(create: (_) => AiProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {

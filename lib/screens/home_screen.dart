@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/washing_machine_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/ai_provider.dart';
 import '../models/washing_data.dart';
 import '../theme/app_theme.dart';
 
@@ -176,30 +177,71 @@ class _AlertBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: cs.error.withValues(alpha: 0.3)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.warning_amber_rounded, color: cs.error),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Machine Alert',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: cs.error,
-                    fontSize: 13,
-                  ),
+          Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: cs.error),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Machine Alert',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: cs.error,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      message,
+                      style: TextStyle(color: cs.error, fontSize: 13),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 2),
-                Text(message, style: TextStyle(color: cs.error, fontSize: 13)),
-              ],
-            ),
+              ),
+              IconButton(
+                icon: Icon(Icons.close, color: cs.error, size: 20),
+                onPressed: onDismiss,
+              ),
+            ],
           ),
-          IconButton(
-            icon: Icon(Icons.close, color: cs.error, size: 20),
-            onPressed: onDismiss,
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 30,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                final provider = context.read<WashingMachineProvider>();
+                final ai = context.read<AiProvider>();
+                final telemetry = provider.telemetry;
+                ai.explainMachineError(
+                  errorName: telemetry.error,
+                  errorCode: telemetry.errorCode,
+                  processState: telemetry.processName,
+                );
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => ChangeNotifierProvider.value(
+                      value: ai,
+                      child: const _AiExplainSheet(),
+                    ),
+                  ),
+                );
+              },
+              icon: Icon(Icons.auto_awesome, size: 14, color: cs.error),
+              label: Text(
+                'Explain with AI',
+                style: TextStyle(fontSize: 12, color: cs.error),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: cs.error.withValues(alpha: 0.4)),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+            ),
           ),
         ],
       ),
@@ -581,6 +623,29 @@ class _ProgramSelector extends StatelessWidget {
                     color: cs.onSurface,
                   ),
                 ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ChangeNotifierProvider.value(
+                          value: context.read<AiProvider>(),
+                          child: _AiAdvisorShortcut(),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: Icon(Icons.auto_awesome, size: 16, color: cs.primary),
+                  label: Text(
+                    'Ask AI',
+                    style: TextStyle(fontSize: 12, color: cs.primary),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -863,6 +928,208 @@ class _StartSection extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── AI Advisor Shortcut (opened from program selector) ───
+class _AiAdvisorShortcut extends StatefulWidget {
+  @override
+  State<_AiAdvisorShortcut> createState() => _AiAdvisorShortcutState();
+}
+
+class _AiAdvisorShortcutState extends State<_AiAdvisorShortcut> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    _controller.clear();
+    context.read<AiProvider>().send(text, feature: AiFeature.washAdvisor);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ai = context.watch<AiProvider>();
+    final cs = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Wash Advisor')),
+      body: Column(
+        children: [
+          Expanded(
+            child: ai.messages.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text(
+                        'Describe your laundry load and I\'ll recommend the best program.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: AppTheme.subtextColor(context)),
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: ai.messages.length + (ai.isLoading ? 1 : 0),
+                    itemBuilder: (context, i) {
+                      if (i == ai.messages.length) {
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: cs.primary,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+                      final msg = ai.messages[i];
+                      final isUser = msg.role == AiMessageRole.user;
+                      return Align(
+                        alignment: isUser
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.82,
+                          ),
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isUser
+                                ? cs.primary
+                                : cs.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: SelectableText(
+                            msg.text,
+                            style: TextStyle(
+                              color: isUser ? cs.onPrimary : cs.onSurface,
+                              fontSize: 14,
+                              height: 1.45,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          Container(
+            padding: EdgeInsets.fromLTRB(
+              12,
+              8,
+              12,
+              8 + MediaQuery.of(context).viewPadding.bottom,
+            ),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: cs.outlineVariant.withValues(alpha: 0.3),
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    maxLines: 2,
+                    minLines: 1,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _send(),
+                    decoration: InputDecoration(
+                      hintText: 'Describe your laundry load...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: cs.surfaceContainerHighest,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: ai.isLoading ? null : _send,
+                  icon: const Icon(Icons.send, size: 20),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── AI Error Explain Sheet (opened from alert banner) ───
+class _AiExplainSheet extends StatelessWidget {
+  const _AiExplainSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final ai = context.watch<AiProvider>();
+    final cs = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Error Diagnostics')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ai.isLoading
+            ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: cs.primary),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Analyzing error...',
+                      style: TextStyle(color: AppTheme.subtextColor(context)),
+                    ),
+                  ],
+                ),
+              )
+            : ai.messages.isEmpty
+            ? Center(
+                child: Text(
+                  'No explanation yet.',
+                  style: TextStyle(color: AppTheme.subtextColor(context)),
+                ),
+              )
+            : ListView.builder(
+                itemCount: ai.messages.length,
+                itemBuilder: (context, i) {
+                  final msg = ai.messages[i];
+                  if (msg.role == AiMessageRole.user) {
+                    return const SizedBox.shrink();
+                  }
+                  return SelectableText(
+                    msg.text,
+                    style: TextStyle(
+                      color: cs.onSurface,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }

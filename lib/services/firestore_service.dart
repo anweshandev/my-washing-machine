@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/maintenance_task.dart';
 
 class FirestoreService {
   static final FirestoreService _instance = FirestoreService._internal();
@@ -101,5 +102,102 @@ class FirestoreService {
         .map(
           (snap) => snap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
         );
+  }
+
+  // ─── Maintenance Tasks ───
+
+  CollectionReference<Map<String, dynamic>> _tasksCol(String uid) =>
+      _db.collection('users').doc(uid).collection('maintenance_tasks');
+
+  Future<String> addTask(String uid, MaintenanceTask task) async {
+    final doc = await _tasksCol(uid).add(task.toMap());
+    return doc.id;
+  }
+
+  Future<void> updateTask(String uid, MaintenanceTask task) async {
+    await _tasksCol(uid).doc(task.id).update(task.toMap());
+  }
+
+  Future<void> deleteTask(String uid, String taskId) async {
+    await _tasksCol(uid).doc(taskId).delete();
+  }
+
+  Stream<List<MaintenanceTask>> streamMaintenanceTasks(String uid) {
+    return _tasksCol(uid)
+        .orderBy('dueDate')
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => MaintenanceTask.fromMap(d.id, d.data()))
+            .toList());
+  }
+
+  Future<void> completeTask(String uid, MaintenanceTask task) async {
+    final now = DateTime.now();
+    // Mark current as done
+    await _tasksCol(uid).doc(task.id).update({
+      'completed': true,
+      'completedAt': Timestamp.fromDate(now),
+    });
+
+    // If recurring, create next occurrence
+    if (task.recurrence != TaskRecurrence.none) {
+      final nextDue = task.recurrence.nextDate(now);
+      if (nextDue != null) {
+        final next = MaintenanceTask(
+          id: '',
+          title: task.title,
+          description: task.description,
+          dueDate: nextDue,
+          recurrence: task.recurrence,
+          photoRequired: task.photoRequired,
+        );
+        await _tasksCol(uid).add(next.toMap());
+      }
+    }
+  }
+
+  Future<void> addPhotoUrl(String uid, String taskId, String url) async {
+    await _tasksCol(uid).doc(taskId).update({
+      'photoUrls': FieldValue.arrayUnion([url]),
+    });
+  }
+
+  // ─── Favourite Wash Configs ───
+
+  Future<void> saveFavouriteWash({
+    required String uid,
+    required String name,
+    required Map<String, dynamic> config,
+  }) async {
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('favourite_washes')
+        .add({
+      'name': name,
+      'config': config,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<List<Map<String, dynamic>>> streamFavouriteWashes(String uid) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('favourite_washes')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        );
+  }
+
+  Future<void> deleteFavouriteWash(String uid, String docId) async {
+    await _db
+        .collection('users')
+        .doc(uid)
+        .collection('favourite_washes')
+        .doc(docId)
+        .delete();
   }
 }

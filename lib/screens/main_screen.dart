@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'history_screen.dart';
+import 'ai_copilot_screen.dart';
 import 'settings_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class _MainScreenState extends State<MainScreen> {
   final List<Widget> _screens = const [
     HomeScreen(),
     HistoryScreen(),
+    AiCopilotScreen(),
     SettingsScreen(),
   ];
 
@@ -46,6 +48,14 @@ class _MainScreenState extends State<MainScreen> {
             ),
             selectedIcon: Icon(Icons.history, color: cs.primary),
             label: 'History',
+          ),
+          NavigationDestination(
+            icon: Icon(
+              Icons.auto_awesome_outlined,
+              color: cs.onSurface.withValues(alpha: 0.6),
+            ),
+            selectedIcon: Icon(Icons.auto_awesome, color: cs.primary),
+            label: 'AI',
           ),
           NavigationDestination(
             icon: Icon(
