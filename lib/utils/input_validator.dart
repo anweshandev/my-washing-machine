@@ -23,8 +23,9 @@ class InputValidator {
     if (value == null || value.trim().isEmpty) return 'Name is required';
     final parts = value.trim().split(RegExp(r'\s+'));
     if (parts.length < 2) return 'Enter first and last name';
-    if (parts.any((p) => p.length < 2))
+    if (parts.any((p) => p.length < 2)) {
       return 'Each name must be at least 2 characters';
+    }
     return null;
   }
 }

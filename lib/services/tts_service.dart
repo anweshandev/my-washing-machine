@@ -8,10 +8,7 @@ class TtsService {
 
   final FlutterTts _tts = FlutterTts();
   bool _initialized = false;
-  bool _enabled = true;
-
-  bool get enabled => _enabled;
-  set enabled(bool value) => _enabled = value;
+  bool enabled = true;
 
   Future<void> init() async {
     if (_initialized) return;
@@ -23,7 +20,7 @@ class TtsService {
   }
 
   Future<void> speak(String text) async {
-    if (!_enabled) return;
+    if (!enabled) return;
     await init();
     await _tts.speak(text);
   }

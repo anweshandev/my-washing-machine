@@ -1,124 +1,42 @@
 import 'dart:convert';
 import 'package:firebase_ai/firebase_ai.dart';
-import 'package:flutter/services.dart' show rootBundle;
 
-/// Manages all AI interactions via Firebase AI (Google AI / Gemini).
+// ignore_for_file: experimental_member_use
+
+/// Manages all AI interactions via Firebase AI template prompts.
 class AiService {
   static final AiService _instance = AiService._internal();
   factory AiService() => _instance;
   AiService._internal();
 
-  static const String _model = 'gemini-2.5-flash';
+  // Template IDs (from Firebase prompt manager)
+  static const String _washAdvisorTemplate = 'wash-advisor-for-washer';
+  static const String _stainHelperTemplate = 'stain-helper-for-washer';
+  static const String _errorExplainerTemplate = 'error-template-for-washer';
+  static const String _laundryCopilotTemplate = 'laundry-copilot-for-washer';
+  static const String _washInsightsTemplate = 'wash-insights-for-washer';
 
-  // Cache loaded prompts so we don't re-read assets each time
-  final Map<String, String> _promptCache = {};
-
-  // Template IDs — set these once you upload prompts to Firebase
-  // When set, the service will use templateGenerativeModel instead
-  String? washAdvisorTemplateId;
-  String? stainHelperTemplateId;
-  String? errorExplainerTemplateId;
-  String? laundryCopilotTemplateId;
-  String? washInsightsTemplateId;
-
-  /// Load a prompt .md file from assets, extracting only the content (skip YAML frontmatter).
-  Future<String> _loadPrompt(String name) async {
-    if (_promptCache.containsKey(name)) return _promptCache[name]!;
-    final raw = await rootBundle.loadString('prompts/$name.md');
-    // Strip YAML frontmatter (between --- markers)
-    final lines = raw.split('\n');
-    int start = 0;
-    if (lines.isNotEmpty && lines[0].trim() == '---') {
-      for (int i = 1; i < lines.length; i++) {
-        if (lines[i].trim() == '---') {
-          start = i + 1;
-          break;
-        }
-      }
-    }
-    final content = lines.sublist(start).join('\n').trim();
-    _promptCache[name] = content;
-    return content;
-  }
-
-  /// Build prompt content from a template string by replacing {{variable}} placeholders.
-  String _fillTemplate(String template, Map<String, String> variables) {
-    var result = template;
-    for (final entry in variables.entries) {
-      result = result.replaceAll('{{${entry.key}}}', entry.value);
-    }
-    // Remove any unfilled optional blocks like {{#if ...}}...{{/if}}
-    result = result.replaceAll(
-      RegExp(r'\{\{#if\s+\w+\}\}.*?\{\{/if\}\}', dotAll: true),
-      '',
-    );
-    return result;
-  }
-
-  /// Parse the prompt into system instruction + user message parts.
-  List<Content> _parsePromptParts(String filled) {
-    final parts = <Content>[];
-    final userMatch = RegExp(
-      r'\{\{role "user"\}\}\s*(.*?)$',
-      dotAll: true,
-    ).firstMatch(filled);
-
-    // We'll use system instruction in the model config and user message as content
-    if (userMatch != null) {
-      parts.add(Content.text(userMatch.group(1)!.trim()));
-    }
-    return parts;
-  }
-
-  /// Extract system instruction from prompt.
-  String? _extractSystemInstruction(String filled) {
-    final match = RegExp(
-      r'\{\{role "system"\}\}\s*(.*?)(?=\{\{role "user"\}\})',
-      dotAll: true,
-    ).firstMatch(filled);
-    return match?.group(1)?.trim();
-  }
-
-  /// Core generation method — uses inline prompt with system instruction.
-  Future<String?> _generate({
-    required String promptName,
-    required Map<String, String> variables,
-  }) async {
-    final template = await _loadPrompt(promptName);
-    final filled = _fillTemplate(template, variables);
-
-    final systemInstruction = _extractSystemInstruction(filled);
-    final userParts = _parsePromptParts(filled);
-
-    final model = FirebaseAI.googleAI().generativeModel(
-      model: _model,
-      systemInstruction: systemInstruction != null
-          ? Content.system(systemInstruction)
-          : null,
-    );
-
-    final response = await model.generateContent(userParts);
-    return response.text;
-  }
+  late final TemplateGenerativeModel _templateModel = FirebaseAI.googleAI()
+      .templateGenerativeModel();
 
   // ─── Public API ───
 
   /// Get wash program recommendation from a natural language description.
   Future<Map<String, dynamic>?> getWashAdvice(String userMessage) async {
-    final text = await _generate(
-      promptName: 'wash_advisor',
-      variables: {'userMessage': userMessage},
+    final response = await _templateModel.generateContent(
+      _washAdvisorTemplate,
+      inputs: {'userMessage': userMessage},
     );
-    return _tryParseJson(text);
+    return _tryParseJson(response.text);
   }
 
   /// Get stain removal advice.
   Future<Map<String, dynamic>?> getStainHelp(String userMessage) async {
-    final text = await _generate(
-      promptName: 'stain_helper',
-      variables: {'userMessage': userMessage},
+    final response = await _templateModel.generateContent(
+      _stainHelperTemplate,
+      inputs: {'userMessage': userMessage},
     );
-    return _tryParseJson(text);
+    return _tryParseJson(response.text);
   }
 
   /// Get error explanation and troubleshooting.
@@ -128,25 +46,25 @@ class AiService {
     required String processState,
     String? additionalContext,
   }) async {
-    final text = await _generate(
-      promptName: 'error_explainer',
-      variables: {
+    final response = await _templateModel.generateContent(
+      _errorExplainerTemplate,
+      inputs: {
         'errorName': errorName,
         'errorCode': errorCode.toString(),
         'processState': processState,
         'additionalContext': ?additionalContext,
       },
     );
-    return _tryParseJson(text);
+    return _tryParseJson(response.text);
   }
 
   /// General laundry copilot chat — returns plain text (not JSON).
   Future<String?> chat(String userMessage) async {
-    final text = await _generate(
-      promptName: 'laundry_copilot',
-      variables: {'userMessage': userMessage},
+    final response = await _templateModel.generateContent(
+      _laundryCopilotTemplate,
+      inputs: {'userMessage': userMessage},
     );
-    return text;
+    return response.text;
   }
 
   /// Analyze wash history and provide insights.
@@ -154,14 +72,14 @@ class AiService {
     required int historyCount,
     required String historyData,
   }) async {
-    final text = await _generate(
-      promptName: 'wash_insights',
-      variables: {
+    final response = await _templateModel.generateContent(
+      _washInsightsTemplate,
+      inputs: {
         'historyCount': historyCount.toString(),
         'historyData': historyData,
       },
     );
-    return _tryParseJson(text);
+    return _tryParseJson(response.text);
   }
 
   /// Attempt to parse JSON from AI response, stripping markdown fences if present.
