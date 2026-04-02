@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../services/washing_machine_bridge.dart';
+import '../services/tts_service.dart';
 import '../models/washing_data.dart';
 
 /// Represents a discovered or paired Bluetooth device.
@@ -166,6 +167,8 @@ class WashingMachineProvider extends ChangeNotifier {
 
   Timer? _pollTimer;
   int _authRetries = 0;
+  int _lastProcessState = 0;
+  final TtsService _tts = TtsService();
 
   WashingMachineProvider() {
     _listenToStreams();
@@ -214,6 +217,9 @@ class WashingMachineProvider extends ChangeNotifier {
       case 'connected':
         _connectionState = BtConnectionState.connected;
         _connectedDeviceName = name.isNotEmpty ? name : _connectedDeviceName;
+        _tts.speak(
+          'Connected to ${name.isNotEmpty ? name : "washing machine"}',
+        );
         _connectedDeviceAddress = address.isNotEmpty
             ? address
             : _connectedDeviceAddress;
@@ -227,6 +233,7 @@ class WashingMachineProvider extends ChangeNotifier {
       case 'failed':
         _connectionState = BtConnectionState.disconnected;
         _isAuthenticated = false;
+        _tts.speak('Disconnected from washing machine');
         _connectedDeviceName = null;
         _connectedDeviceAddress = null;
         _stopPolling();
@@ -301,6 +308,10 @@ class WashingMachineProvider extends ChangeNotifier {
           _raiseAlert(alarmName, alarmCode);
         }
         _lastErrorCode = alarmCode;
+
+        // Speak state-change cues
+        _speakStateChange(processState);
+        _lastProcessState = processState;
         break;
 
       case 'controlAck':
@@ -335,6 +346,31 @@ class WashingMachineProvider extends ChangeNotifier {
     _addLog('ALERT: $message (code $errorCode)');
     // Play system beep
     _playAlertSound();
+    // Speak the error
+    _tts.speak('Error: $message');
+  }
+
+  void _speakStateChange(int newState) {
+    if (newState == _lastProcessState) return;
+    // Wash completed
+    if (newState == 13 || newState == 23) {
+      _tts.speak('Wash cycle completed');
+    }
+    // Paused
+    else if (newState == 14 && _lastProcessState != 14) {
+      _tts.speak('Wash paused');
+    }
+    // Started / Resumed
+    else if (_lastProcessState == 14 &&
+        newState != 14 &&
+        newState >= 2 &&
+        newState <= 12) {
+      _tts.speak('Wash resumed');
+    }
+    // First start (from standby/init to a running state)
+    else if (_lastProcessState <= 1 && newState >= 2 && newState <= 12) {
+      _tts.speak('Wash cycle started');
+    }
   }
 
   Future<void> _playAlertSound() async {

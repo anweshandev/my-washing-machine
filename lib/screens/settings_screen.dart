@@ -3,10 +3,18 @@ import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/tts_service.dart';
 import '../theme/app_theme.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  final TtsService _tts = TtsService();
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +89,17 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 value: theme.isDark,
                 onChanged: (_) => theme.toggle(),
+              ),
+              SwitchListTile(
+                title: const Text('Voice Alerts'),
+                subtitle: Text(
+                  _tts.enabled
+                      ? 'Errors and cues will be spoken'
+                      : 'Voice alerts disabled',
+                ),
+                secondary: Icon(Icons.record_voice_over, color: cs.primary),
+                value: _tts.enabled,
+                onChanged: (v) => setState(() => _tts.enabled = v),
               ),
             ],
           ),

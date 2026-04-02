@@ -1,0 +1,34 @@
+import 'package:flutter_tts/flutter_tts.dart';
+
+/// Singleton TTS service for speaking errors and status cues.
+class TtsService {
+  static final TtsService _instance = TtsService._internal();
+  factory TtsService() => _instance;
+  TtsService._internal();
+
+  final FlutterTts _tts = FlutterTts();
+  bool _initialized = false;
+  bool _enabled = true;
+
+  bool get enabled => _enabled;
+  set enabled(bool value) => _enabled = value;
+
+  Future<void> init() async {
+    if (_initialized) return;
+    await _tts.setLanguage('en-US');
+    await _tts.setSpeechRate(0.5);
+    await _tts.setVolume(1.0);
+    await _tts.setPitch(1.0);
+    _initialized = true;
+  }
+
+  Future<void> speak(String text) async {
+    if (!_enabled) return;
+    await init();
+    await _tts.speak(text);
+  }
+
+  Future<void> stop() async {
+    await _tts.stop();
+  }
+}

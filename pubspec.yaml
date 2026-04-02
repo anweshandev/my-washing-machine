@@ -57,6 +57,7 @@ dependencies:
   zo_screenshot: ^0.0.4
   google_sign_in: ^6.2.0
   intl: ^0.20.2
+  firebase_ai: ^3.10.0
 
 dev_dependencies:
   flutter_test:
@@ -89,6 +90,7 @@ flutter:
     - assets/logos/
     - assets/images/
     - assets/icons/
+    - prompts/
 
   fonts:
     - family: Roboto
