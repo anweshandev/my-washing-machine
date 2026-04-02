@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/washing_machine_provider.dart';
 import '../services/tts_service.dart';
 import '../theme/app_theme.dart';
 
@@ -172,9 +173,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              context.read<AuthProvider>().signOut();
+              await context.read<WashingMachineProvider>().disconnect();
+              await context.read<AuthProvider>().signOut();
+              if (context.mounted) {
+                Navigator.of(
+                  context,
+                ).pushNamedAndRemoveUntil('/', (route) => false);
+              }
             },
             child: Text(
               'Sign Out',

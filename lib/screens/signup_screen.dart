@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../utils/input_validator.dart';
@@ -191,17 +192,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
                   SizedBox(
                     width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: auth.isLoading ? null : _handleGoogleSignUp,
-                      icon: Image.asset(
-                        'assets/logos/icon-192.png',
-                        width: 20,
-                        height: 20,
-                        errorBuilder: (_, _, _) =>
-                            const Icon(Icons.g_mobiledata, size: 20),
+                    height: 40,
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(4),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: auth.isLoading ? null : _handleGoogleSignUp,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: SvgPicture.asset(
+                            'assets/icons/android_light_sq_ctn.svg',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
-                      label: const Text('Continue with Google'),
                     ),
                   ),
 

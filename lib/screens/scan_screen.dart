@@ -26,8 +26,24 @@ class _ScanScreenState extends State<ScanScreen>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<WashingMachineProvider>().loadPairedDevices();
+      _loadAndAutoConnect();
     });
+  }
+
+  Future<void> _loadAndAutoConnect() async {
+    final provider = context.read<WashingMachineProvider>();
+    await provider.loadPairedDevices();
+    if (!mounted) return;
+
+    // Auto-connect to a paired WB-Dual device if available
+    final target = provider.filteredPairedDevices.cast<BtDevice?>().firstWhere(
+      (d) => d!.name.toUpperCase().contains('WB-DUAL'),
+      orElse: () => null,
+    );
+    if (target != null) {
+      await provider.connectToDevice(target);
+      if (mounted) _waitForConnectionAndAuth(provider);
+    }
   }
 
   @override

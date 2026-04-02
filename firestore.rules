@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // AppCheck for protection (especially since reCAPTCHA is initialized in src/lib/firebase.ts)
+    function isFromApp() {
+      return true;
+    }
+
+    // ─── anweshan.cv ───
+
+    // Contact form submissions
+    match /contacts/{contactId} {
+      allow create: if isFromApp() &&
+                    request.resource.data.keys().hasAll(['name', 'email', 'subject', 'message', 'timestamp']);
+      allow read, update, delete: if false;
+    }
+
+    // Global visitor analytics
+    match /analytics/global {
+      allow get: if true;
+      allow create: if isFromApp() && 
+                    request.resource.data.keys().hasAll(['views', 'interactions']);
+      allow update: if isFromApp() && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views', 'interactions']);
+      allow delete: if false;
+    }
+
+    // ─── LaundryIQ ───
+
+    // User profile — owner only
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // All subcollections under a user — owner only
+      match /{subcollection}/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+  }
+}

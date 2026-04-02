@@ -203,15 +203,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   // Google Sign-In
                   SizedBox(
                     width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: auth.isLoading ? null : _handleGoogleSignIn,
-                      icon: SvgPicture.asset(
-                        'assets/icons/android_light_sq_ctn.svg',
-                        width: 20,
-                        height: 20,
+                    height: 40,
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(4),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: auth.isLoading ? null : _handleGoogleSignIn,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: SvgPicture.asset(
+                            'assets/icons/android_light_sq_ctn.svg',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
-                      label: const Text('Continue with Google'),
                     ),
                   ),
 

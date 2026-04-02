@@ -149,7 +149,7 @@ class _PermissionsScreenState extends State<PermissionsScreen>
   void _checkReady() {
     if (!mounted || _initializing) return;
     if (_canContinue()) {
-      Navigator.of(context).pushReplacementNamed('/main');
+      Navigator.of(context).pushReplacementNamed('/scan');
     }
   }
 
