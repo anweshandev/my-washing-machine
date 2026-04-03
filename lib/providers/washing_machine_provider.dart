@@ -461,7 +461,8 @@ class WashingMachineProvider extends ChangeNotifier {
     try {
       await WashingMachineBridge.startForegroundService(
         title: 'LaundryIQ – Washing',
-        body: '${_telemetry.processName} · ${_telemetry.remainingTime} remaining',
+        body:
+            '${_telemetry.processName} · ${_telemetry.remainingTime} remaining',
       );
     } catch (_) {
       _foregroundServiceRunning = false;
@@ -473,7 +474,8 @@ class WashingMachineProvider extends ChangeNotifier {
     try {
       await WashingMachineBridge.updateForegroundService(
         title: 'LaundryIQ – Washing',
-        body: '${_telemetry.processName} · ${_telemetry.remainingTime} remaining',
+        body:
+            '${_telemetry.processName} · ${_telemetry.remainingTime} remaining',
       );
     } catch (_) {}
   }
